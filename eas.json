@@ -1,0 +1,62 @@
+{
+  "cli": {
+    "version": ">= 7.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true,
+        "resourceClass": "m-medium"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "development"
+      }
+    },
+
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium",
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "preview"
+      }
+    },
+
+    "production": {
+      "ios": {
+        "resourceClass": "m-medium",
+        "autoIncrement": "buildNumber"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "autoIncrement": "versionCode"
+      },
+      "env": {
+        "APP_ENV": "production"
+      }
+    }
+  },
+
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "sandeepskumar@gmail.com",
+        "ascAppId": "6761154092",
+        "appleTeamId": "WPV73MKRJM",
+        "language": "en-US",
+        "sku": "moneycells001"
+      }
+    }
+  }
+}

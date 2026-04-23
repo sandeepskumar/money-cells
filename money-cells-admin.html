@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Money Cells Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0f0a;color:#f0fdf4;min-height:100vh}
+  .login{display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .login-box{background:#162116;border:1px solid #1e3a28;border-radius:16px;padding:40px;width:360px;gap:20px;display:flex;flex-direction:column}
+  .login-box h1{font-size:24px;font-weight:800;color:#4ade80;text-align:center}
+  .login-box input{background:#0a0f0a;border:1.5px solid #1e3a28;border-radius:10px;padding:14px;color:#f0fdf4;font-size:15px;width:100%}
+  .login-box input:focus{outline:none;border-color:#22c55e}
+  .btn{background:#22c55e;color:#0a0f0a;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;width:100%}
+  .btn:hover{background:#4ade80}
+  .btn-outline{background:transparent;color:#4ade80;border:1.5px solid #22c55e;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer}
+  .error{color:#ef4444;font-size:13px;text-align:center}
+  header{background:#111811;border-bottom:1px solid #1e3a28;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:20px;font-weight:800;color:#4ade80}
+  header span{color:#4d7c5f;font-size:13px}
+  .dashboard{padding:24px;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+  .stat-card{background:#162116;border:1px solid #1e3a28;border-radius:14px;padding:20px}
+  .stat-card .label{color:#4d7c5f;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+  .stat-card .value{color:#f0fdf4;font-size:32px;font-weight:800;letter-spacing:-1px}
+  .stat-card .sub{color:#4d7c5f;font-size:12px;margin-top:4px}
+  .stat-card.green .value{color:#4ade80}
+  .stat-card.amber .value{color:#f59e0b}
+  .stat-card.blue  .value{color:#60a5fa}
+  .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:768px){.charts-grid{grid-template-columns:1fr}}
+  .chart-card{background:#162116;border:1px solid #1e3a28;border-radius:14px;padding:20px}
+  .chart-card h2{color:#4d7c5f;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:16px}
+  .table-card{background:#162116;border:1px solid #1e3a28;border-radius:14px;padding:20px;overflow-x:auto}
+  .table-card h2{color:#4d7c5f;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse}
+  th{color:#4d7c5f;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:8px 12px;text-align:left;border-bottom:1px solid #1e3a28}
+  td{padding:10px 12px;font-size:13px;border-bottom:1px solid #111811;color:#cbd5e1}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#1a2a1a}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .badge-green{background:#052e16;color:#4ade80;border:1px solid #166534}
+  .badge-amber{background:#1a1200;color:#f59e0b;border:1px solid #92400e}
+  .loading{color:#4d7c5f;text-align:center;padding:40px;font-size:14px}
+  .refresh-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .refresh-bar span{color:#4d7c5f;font-size:12px}
+  #app{display:none}
+</style>
+</head>
+<body>
+
+<!-- Login gate -->
+<div class="login" id="loginScreen">
+  <div class="login-box">
+    <h1>🧬 Money Cells Admin</h1>
+    <input type="password" id="adminPin" placeholder="Admin password" onkeydown="if(event.key==='Enter')login()"/>
+    <button class="btn" onclick="login()">Sign In</button>
+    <p class="error" id="loginError"></p>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="app">
+  <header>
+    <h1>🧬 Money Cells Admin</h1>
+    <div style="display:flex;align-items:center;gap:16px">
+      <span id="lastRefresh">–</span>
+      <button class="btn-outline" onclick="loadAll()">↻ Refresh</button>
+      <button class="btn-outline" onclick="signOut()">Sign out</button>
+    </div>
+  </header>
+
+  <div class="dashboard">
+    <!-- KPI row -->
+    <div class="stats-grid" id="kpiGrid">
+      <div class="loading">Loading stats...</div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h2>Daily Signups — last 30 days</h2>
+        <canvas id="signupsChart" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <h2>Daily Sessions — last 30 days</h2>
+        <canvas id="sessionsChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Recent sessions table -->
+    <div class="table-card">
+      <div class="refresh-bar">
+        <h2>Recent Sessions</h2>
+        <span id="sessionCount">–</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Kid</th><th>Age</th><th>Duration</th><th>Rounds</th>
+            <th>Cells Saved</th><th>Cells Spent</th><th>Rate</th>
+            <th>Graduated</th><th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="sessionsTable"><tr><td colspan="9" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Recent signups -->
+    <div class="table-card">
+      <h2>Recent Signups</h2>
+      <table>
+        <thead>
+          <tr><th>Email</th><th>Joined</th><th>Last Active</th><th>Logins</th></tr>
+        </thead>
+        <tbody id="usersTable"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Feedback -->
+    <div class="table-card">
+      <div class="refresh-bar">
+        <h2>Feedback</h2>
+        <span id="feedbackCount">–</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Source</th><th>Category</th><th>Rating</th><th>Message</th><th>Email</th><th>Date</th></tr>
+        </thead>
+        <tbody id="feedbackTable"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config — replace with your actual values ──────────────────────────────
+const SUPABASE_URL  = 'https://wztykysqvnngsnmadrdt.supabase.co';
+const SERVICE_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6dHlreXNxdm5uZ3NubWFkcmR0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTAxMDkyNSwiZXhwIjoyMDkwNTg2OTI1fQ.nVbNM60QmBHM4zKAsXX21h3JlXvoqXzIWKgo5I2WQEM'; // Settings → API → service_role
+const ADMIN_PASS    = 'moneycells-admin-2026'; // change this to your own password
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+function login(){
+  const pin = document.getElementById('adminPin').value;
+  if(pin === ADMIN_PASS){
+    sessionStorage.setItem('mc_admin', '1');
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadAll();
+  } else {
+    document.getElementById('loginError').textContent = 'Wrong password.';
+  }
+}
+
+function signOut(){
+  sessionStorage.removeItem('mc_admin');
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('adminPin').value = '';
+}
+
+// Check if already signed in this session
+if(sessionStorage.getItem('mc_admin') === '1'){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+// ── Supabase query helper ─────────────────────────────────────────────────
+async function query(path, params=''){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}${params}`, {
+    headers:{
+      'apikey': SERVICE_KEY,
+      'Authorization': `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    }
+  });
+  if(!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ── Load all data ─────────────────────────────────────────────────────────
+let signupsChartInst, sessionsChartInst;
+
+async function loadAll(){
+  document.getElementById('lastRefresh').textContent = 'Refreshing...';
+  try {
+    await Promise.all([loadKPIs(), loadSignupsChart(), loadSessionsChart(), loadRecentSessions(), loadRecentUsers(), loadFeedback()]);
+    document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error(e);
+    document.getElementById('lastRefresh').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function loadKPIs(){
+  const [profiles, sessions, events] = await Promise.all([
+    query('profiles', '?select=id,created_at,last_login_at'),
+    query('sessions', '?select=id,graduated,duration_secs,started_at'),
+    query('events',   '?select=id,event_type'),
+  ]);
+
+  const now = new Date();
+  const d1 = new Date(now - 86400000);
+  const d7 = new Date(now - 7*86400000);
+  const d30= new Date(now - 30*86400000);
+
+  const totalUsers   = profiles.length;
+  const dau          = profiles.filter(p => new Date(p.last_login_at) > d1).length;
+  const wau          = profiles.filter(p => new Date(p.last_login_at) > d7).length;
+  const newLast30    = profiles.filter(p => new Date(p.created_at) > d30).length;
+  const totalSessions= sessions.length;
+  const sessToday    = sessions.filter(s => new Date(s.started_at) > d1).length;
+  const graduations  = sessions.filter(s => s.graduated).length;
+  const gradRate     = totalSessions > 0 ? Math.round(graduations/totalSessions*100) : 0;
+  const avgMins      = sessions.filter(s=>s.duration_secs>0).length > 0
+    ? Math.round(sessions.filter(s=>s.duration_secs>0).reduce((a,s)=>a+s.duration_secs,0) / sessions.filter(s=>s.duration_secs>0).length / 60)
+    : 0;
+  const cellieChats  = events.filter(e => e.event_type === 'cellie_chat').length;
+  const flashResist  = events.filter(e => e.event_type === 'flash_deal_resist').length;
+  const flashBuy     = events.filter(e => e.event_type === 'flash_deal_buy').length;
+  const resistRate   = (flashResist+flashBuy) > 0 ? Math.round(flashResist/(flashResist+flashBuy)*100) : 0;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="stat-card green"><div class="label">Total Users</div><div class="value">${totalUsers.toLocaleString()}</div><div class="sub">+${newLast30} last 30 days</div></div>
+    <div class="stat-card green"><div class="label">DAU</div><div class="value">${dau}</div><div class="sub">WAU: ${wau}</div></div>
+    <div class="stat-card"><div class="label">Total Sessions</div><div class="value">${totalSessions.toLocaleString()}</div><div class="sub">${sessToday} today</div></div>
+    <div class="stat-card amber"><div class="label">Graduation Rate</div><div class="value">${gradRate}%</div><div class="sub">${graduations} total grads</div></div>
+    <div class="stat-card"><div class="label">Avg Session</div><div class="value">${avgMins}m</div><div class="sub">minutes per session</div></div>
+    <div class="stat-card blue"><div class="label">Cellie Chats</div><div class="value">${cellieChats.toLocaleString()}</div><div class="sub">AI questions asked</div></div>
+    <div class="stat-card green"><div class="label">Flash Deal Resist</div><div class="value">${resistRate}%</div><div class="sub">${flashResist} resisted of ${flashResist+flashBuy}</div></div>
+  `;
+}
+
+async function loadSignupsChart(){
+  const rows = await query('profiles', `?select=created_at&order=created_at.asc&created_at=gte.${daysAgo(30)}`);
+  const byDay = groupByDay(rows, 'created_at');
+  const labels = Object.keys(byDay).slice(-30);
+  const values = labels.map(d => byDay[d]||0);
+
+  if(signupsChartInst) signupsChartInst.destroy();
+  signupsChartInst = new Chart(document.getElementById('signupsChart'), {
+    type:'bar',
+    data:{labels:labels.map(shortDate), datasets:[{label:'Signups',data:values,backgroundColor:'#22c55e88',borderColor:'#22c55e',borderWidth:1}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#4d7c5f',maxRotation:45}},y:{ticks:{color:'#4d7c5f'},beginAtZero:true}}}
+  });
+}
+
+async function loadSessionsChart(){
+  const rows = await query('sessions', `?select=started_at,graduated&order=started_at.asc&started_at=gte.${daysAgo(30)}`);
+  const byDay = groupByDay(rows, 'started_at');
+  const gradByDay = {};
+  rows.filter(r=>r.graduated).forEach(r=>{const d=r.started_at.slice(0,10);gradByDay[d]=(gradByDay[d]||0)+1;});
+  const labels = Object.keys(byDay).slice(-30);
+
+  if(sessionsChartInst) sessionsChartInst.destroy();
+  sessionsChartInst = new Chart(document.getElementById('sessionsChart'), {
+    type:'bar',
+    data:{labels:labels.map(shortDate), datasets:[
+      {label:'Sessions',data:labels.map(d=>byDay[d]||0),backgroundColor:'#3b82f688',borderColor:'#3b82f6',borderWidth:1},
+      {label:'Graduations',data:labels.map(d=>gradByDay[d]||0),backgroundColor:'#f59e0b88',borderColor:'#f59e0b',borderWidth:1},
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'#4d7c5f'}}},scales:{x:{ticks:{color:'#4d7c5f',maxRotation:45}},y:{ticks:{color:'#4d7c5f'},beginAtZero:true}}}
+  });
+}
+
+async function loadRecentSessions(){
+  const rows = await query('sessions', '?order=started_at.desc&limit=50');
+  document.getElementById('sessionCount').textContent = `${rows.length} shown`;
+  document.getElementById('sessionsTable').innerHTML = rows.length === 0
+    ? '<tr><td colspan="9" class="loading">No sessions yet</td></tr>'
+    : rows.map(s => `
+      <tr>
+        <td>${s.kid_name||'–'}</td>
+        <td>${s.kid_age||'–'}</td>
+        <td>${s.duration_secs ? Math.round(s.duration_secs/60)+'m' : '–'}</td>
+        <td>${s.rounds_played||0}</td>
+        <td style="color:#4ade80">${s.cells_saved||0}</td>
+        <td style="color:#ef4444">${s.cells_spent||0}</td>
+        <td><span class="badge ${s.rate==='fast'?'badge-amber':'badge-green'}">${s.rate||'–'}</span></td>
+        <td>${s.graduated ? '<span class="badge badge-green">🎓 Yes</span>' : '<span class="badge badge-amber">No</span>'}</td>
+        <td style="color:#4d7c5f">${new Date(s.started_at).toLocaleDateString()}</td>
+      </tr>`).join('');
+}
+
+async function loadRecentUsers(){
+  const rows = await query('profiles', '?order=created_at.desc&limit=30&select=email,created_at,last_login_at,login_count');
+  document.getElementById('usersTable').innerHTML = rows.length === 0
+    ? '<tr><td colspan="4" class="loading">No users yet</td></tr>'
+    : rows.map(u => `
+      <tr>
+        <td>${u.email}</td>
+        <td style="color:#4d7c5f">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td style="color:#4d7c5f">${new Date(u.last_login_at).toLocaleDateString()}</td>
+        <td>${u.login_count||1}</td>
+      </tr>`).join('');
+}
+
+async function loadFeedback(){
+  const rows = await query('feedback', '?order=created_at.desc&limit=50');
+  document.getElementById('feedbackCount').textContent = `${rows.length} shown`;
+  const stars = r => r ? '★'.repeat(r) + '☆'.repeat(5-r) : '–';
+  const truncate = (s, n=80) => s && s.length > n ? s.slice(0,n)+'…' : (s||'–');
+  document.getElementById('feedbackTable').innerHTML = rows.length === 0
+    ? '<tr><td colspan="6" class="loading">No feedback yet</td></tr>'
+    : rows.map(f => `
+      <tr>
+        <td><span class="badge ${f.source==='kid'?'badge-amber':'badge-green'}">${f.source==='kid'?'🧒 Kid':'👨 Parent'}</span></td>
+        <td style="color:#4d7c5f">${f.category||'–'}</td>
+        <td style="color:#f59e0b;letter-spacing:1px">${stars(f.rating)}</td>
+        <td style="max-width:300px">${truncate(f.text)}</td>
+        <td style="color:#4d7c5f;font-size:11px">${f.email||'–'}</td>
+        <td style="color:#4d7c5f">${new Date(f.created_at).toLocaleDateString()}</td>
+      </tr>`).join('');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function daysAgo(n){ return new Date(Date.now()-n*86400000).toISOString(); }
+function shortDate(d){ const [,m,day]=d.split('-'); return `${m}/${day}`; }
+function groupByDay(rows, field){
+  const out={};
+  rows.forEach(r=>{ const d=r[field]?.slice(0,10); if(d) out[d]=(out[d]||0)+1; });
+  return out;
+}
+
+// Auto-refresh every 5 minutes
+if(sessionStorage.getItem('mc_admin')==='1') loadAll();
+setInterval(()=>{ if(sessionStorage.getItem('mc_admin')==='1') loadAll(); }, 300000);
+</script>
+</body>
+</html>
