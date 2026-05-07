@@ -15,6 +15,8 @@ import {
   Image, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
 
@@ -22,7 +24,7 @@ import { createClient } from '@supabase/supabase-js';
 // Replace with your actual project URL and anon key from Supabase dashboard
 // Settings → API → Project URL and anon/public key
 const SUPABASE_URL  = 'https://wztykysqvnngsnmadrdt.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6dHlreXNxdm5uZ3NubWFkcmR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTA5MjUsImV4cCI6MjA5MDU4NjkyNX0.l4qJz6_lX83H1vAxbv5vYWVugtwCl_PXrl6gVMd51Hw'; // Settings → API → anon key
+const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY'; // Settings → API → anon key
 
 // Custom storage adapter using SecureStore for auth tokens
 const ExpoSecureStoreAdapter = {
@@ -1014,7 +1016,9 @@ function gameReducer(state,action){
       flashDealExpiredMsg:null}:state;
 
     // ── Graduate colony → start next ──────────────────────────────────────
-    case 'GRADUATE':return state?startNextColony(state):state;
+    case 'GRADUATE':
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return state?startNextColony(state):state;
     case 'SEEN_ONBOARDING':return state?{...state,hasSeenOnboarding:true}:state;
     case 'QUIZ_BONUS':{
       // Add bonus cells directly to the live colony, mark question as seen
@@ -1524,6 +1528,122 @@ function Particle({x,y,angle,speed,color,size,onDone}){
 // ── CRISP CELL — biological elongation along random per-cell axis ──────────
 // elongAngle stored in cell state (0–π), derived from seed → each cell has
 // its own division axis that never changes.  elongation animates from game.timer.
+// ── Split burst — particles + ripple that fire at the snap moment ─────────
+function SplitBurst({x, y, active}){
+  // 8 particles flying outward at different angles
+  const particles = useRef(
+    Array.from({length:8}, (_,i) => ({
+      angle: (i / 8) * Math.PI * 2,
+      dist:  new Animated.Value(0),
+      opacity: new Animated.Value(0),
+      scale:   new Animated.Value(1),
+    }))
+  ).current;
+
+  // Ripple ring
+  const rippleScale   = useRef(new Animated.Value(0.3)).current;
+  const rippleOpacity = useRef(new Animated.Value(0)).current;
+
+  // Score float
+  const floatY   = useRef(new Animated.Value(0)).current;
+  const floatOpa = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!active) return;
+
+    // Reset all
+    particles.forEach(p => { p.dist.setValue(0); p.opacity.setValue(0); p.scale.setValue(1); });
+    rippleScale.setValue(0.3); rippleOpacity.setValue(0);
+    floatY.setValue(0); floatOpa.setValue(0);
+
+    // Fire particles outward
+    const particleAnims = particles.map(p =>
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(p.opacity, {toValue:1, duration:60, useNativeDriver:true}),
+          Animated.timing(p.opacity, {toValue:0, duration:260, useNativeDriver:true}),
+        ]),
+        Animated.timing(p.dist, {toValue:1, duration:340, useNativeDriver:true}),
+        Animated.timing(p.scale, {toValue:0.3, duration:340, useNativeDriver:true}),
+      ])
+    );
+
+    // Ripple ring
+    const rippleAnim = Animated.parallel([
+      Animated.timing(rippleScale,   {toValue:2.8, duration:420, useNativeDriver:true}),
+      Animated.sequence([
+        Animated.timing(rippleOpacity, {toValue:0.7, duration:80,  useNativeDriver:true}),
+        Animated.timing(rippleOpacity, {toValue:0,   duration:340, useNativeDriver:true}),
+      ]),
+    ]);
+
+    // Score float
+    const floatAnim = Animated.parallel([
+      Animated.timing(floatY,   {toValue:-32, duration:600, useNativeDriver:true}),
+      Animated.sequence([
+        Animated.timing(floatOpa, {toValue:1,  duration:80,  useNativeDriver:true}),
+        Animated.delay(280),
+        Animated.timing(floatOpa, {toValue:0,  duration:240, useNativeDriver:true}),
+      ]),
+    ]);
+
+    Animated.parallel([...particleAnims, rippleAnim, floatAnim]).start();
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!active) return null;
+
+  const BURST_RADIUS = CR * 2.2; // how far particles travel
+
+  return (
+    <View style={{position:'absolute', left:x - CR, top:y - CR,
+      width:CR*2, height:CR*2, pointerEvents:'none', overflow:'visible', zIndex:20}}>
+
+      {/* Particles */}
+      {particles.map((p, i) => {
+        const tx = p.dist.interpolate({inputRange:[0,1], outputRange:[0, Math.cos(p.angle)*BURST_RADIUS]});
+        const ty = p.dist.interpolate({inputRange:[0,1], outputRange:[0, Math.sin(p.angle)*BURST_RADIUS]});
+        return (
+          <Animated.View key={i} style={{
+            position:'absolute',
+            left: CR - 4,
+            top:  CR - 4,
+            width: 8, height: 8, borderRadius: 4,
+            backgroundColor: i % 2 === 0 ? C.green400 : C.amber,
+            opacity: p.opacity,
+            transform: [{translateX: tx}, {translateY: ty}, {scale: p.scale}],
+          }}/>
+        );
+      })}
+
+      {/* Ripple ring */}
+      <Animated.View style={{
+        position:'absolute',
+        left: CR - CR,
+        top:  CR - CR,
+        width: CR*2, height: CR*2, borderRadius: CR,
+        borderWidth: 2, borderColor: C.green400,
+        opacity: rippleOpacity,
+        transform: [{scale: rippleScale}],
+        pointerEvents:'none',
+      }}/>
+
+      {/* +1 score float */}
+      <Animated.Text style={{
+        position:'absolute',
+        left: CR - 10,
+        top:  CR - 8,
+        fontSize: 14, fontWeight:'800',
+        color: C.greenL,
+        opacity: floatOpa,
+        transform: [{translateY: floatY}],
+        textShadowColor: C.bg,
+        textShadowOffset: {width:0, height:1},
+        textShadowRadius: 3,
+      }}>+1</Animated.Text>
+    </View>
+  );
+}
+
 function Cell({cell,onTap,interactive,totalLive,roundTimer}){
   const breathAnim =useRef(new Animated.Value(1)).current;
   const floatX     =useRef(new Animated.Value(0)).current;
@@ -1532,10 +1652,14 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
   const opacityAnim=useRef(new Animated.Value(1)).current;
   const wobble     =useRef(new Animated.Value(0)).current;
   const staticScale=useRef(new Animated.Value(1)).current;
+  const splitFlash =useRef(new Animated.Value(0)).current; // white flash at snap
+  const snapScale  =useRef(new Animated.Value(1)).current; // scale pop at snap
   // Elongation: two values that scale along/across elongAngle axis
   const elongSX    =useRef(new Animated.Value(1)).current; // perpendicular axis (narrows)
   const elongSY    =useRef(new Animated.Value(1)).current; // division axis (grows)
   const[countdown,setCountdown]=useState(3);
+  const[splitPhase,setSplitPhase]=useState('idle'); // 'idle'|'wobbling'|'stretching'|'snapping'
+  const[burstActive,setBurstActive]=useState(false);
 
   const tier=totalLive<=TIER1_MAX?1:totalLive<=TIER2_MAX?2:3;
 
@@ -1561,7 +1685,9 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
   useEffect(()=>{
     if(cell.isNew){
       elongSX.setValue(1);elongSY.setValue(1);
-      Animated.spring(birthAnim,{toValue:1,friction:3,tension:120,useNativeDriver:true}).start();
+      splitFlash.setValue(0);snapScale.setValue(1);
+      // Baby cells pop in with high energy overshoot
+      Animated.spring(birthAnim,{toValue:1,friction:2.2,tension:180,useNativeDriver:true}).start();
     }
   },[cell.isNew]);// eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1611,20 +1737,54 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
     return()=>clearInterval(interval);
   },[cell.spendState,cell.pendingAt]);
 
-  // ── Splitting pinch — brief waist before snap ─────────────────────────
+  // ── Splitting: 3-phase wobble → stretch → snap ───────────────────────
   useEffect(()=>{ // eslint-disable-line react-hooks/exhaustive-deps
-    if(cell.splitting){
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(elongSX,{toValue:1.5, duration:110,useNativeDriver:true}),
-          Animated.timing(elongSY,{toValue:0.35,duration:110,useNativeDriver:true}),
+    if(!cell.splitting)return;
+    setSplitPhase('wobbling');
+    // Phase 1: Pre-split wobble — cell shakes like it can't hold itself together (320ms)
+    Animated.sequence([
+      Animated.timing(wobble,{toValue: 2.2,duration:70,useNativeDriver:true}),
+      Animated.timing(wobble,{toValue:-2.2,duration:70,useNativeDriver:true}),
+      Animated.timing(wobble,{toValue: 1.8,duration:60,useNativeDriver:true}),
+      Animated.timing(wobble,{toValue:-1.8,duration:60,useNativeDriver:true}),
+      Animated.timing(wobble,{toValue: 0,  duration:60,useNativeDriver:true}),
+    ]).start(()=>{
+      setSplitPhase('stretching');
+      // Phase 2: Stretch — water balloon about to pop (380ms)
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(elongSY,{toValue:1.95,duration:260,useNativeDriver:true}),
+          Animated.timing(elongSY,{toValue:1.6, duration:120,useNativeDriver:true}),
         ]),
-        Animated.parallel([
-          Animated.timing(elongSX,{toValue:1,duration:220,useNativeDriver:true}),
-          Animated.timing(elongSY,{toValue:1,duration:220,useNativeDriver:true}),
+        Animated.sequence([
+          Animated.timing(elongSX,{toValue:0.42,duration:260,useNativeDriver:true}),
+          Animated.timing(elongSX,{toValue:0.6, duration:120,useNativeDriver:true}),
         ]),
-      ]).start();
-    }
+      ]).start(()=>{
+        setSplitPhase('snapping');
+        // Phase 3: Snap — dramatic pinch at waist + flash (200ms)
+        Animated.parallel([
+          Animated.timing(elongSX,{toValue:0.05,duration:130,useNativeDriver:true}),
+          Animated.timing(elongSY,{toValue:0.15,duration:130,useNativeDriver:true}),
+          Animated.sequence([
+            Animated.timing(splitFlash,{toValue:1,duration:80,useNativeDriver:true}),
+            Animated.timing(splitFlash,{toValue:0,duration:120,useNativeDriver:true}),
+          ]),
+          Animated.sequence([
+            Animated.timing(snapScale,{toValue:1.6,duration:90,useNativeDriver:true}),
+            Animated.timing(snapScale,{toValue:1,  duration:110,useNativeDriver:true}),
+          ]),
+        ]).start(()=>{
+          setSplitPhase('idle');
+          // Fire burst particles + ripple at the snap point
+          setBurstActive(true);
+          setTimeout(()=>setBurstActive(false), 450); // reset after animation
+          // Satisfying snap haptic — heavier than a tap
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          elongSX.setValue(1);elongSY.setValue(1);wobble.setValue(0);
+        });
+      });
+    });
   },[cell.splitting]);// eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Burst fade ───────────────────────────────────────────────────────
@@ -1647,30 +1807,53 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
   const eNegDeg=`${(-(cell.elongAngle||0)*180/Math.PI).toFixed(1)}deg`;
 
   const hue=cell.hue||138;
-  const memStroke=cell.burst?C.red:isConfirmed?C.red:isPending?C.amber:cell.splitting?`hsl(${hue},80%,65%)`:`hsl(${hue},70%,58%)`;
-  const cytoFill  =cell.burst||isConfirmed?`${C.red}30`:isPending?`${C.amber}30`:`hsla(${hue},60%,30%,0.38)`;
-  const nucleusFill=cell.burst||isConfirmed?`${C.red}99`:isPending?`${C.amber}88`:`hsla(${hue},55%,22%,0.8)`;
-  const nucleoFill =cell.burst||isConfirmed?`${C.red}dd`:isPending?`${C.amber}cc`:`hsla(${hue},75%,70%,0.9)`;
-  const orgFill    =cell.burst||isConfirmed?`${C.red}66`:isPending?`${C.amber}55`:`hsla(${hue},60%,50%,0.5)`;
+
+  // Age-based readiness — cells shift gold as they approach splitting
+  // splitPhase drives visual state: idle→wobbling→stretching→snapping
+  const isReady     = splitPhase==='stretching'||splitPhase==='snapping';
+  const isWobbling  = splitPhase==='wobbling';
+  const readyHue    = 48; // gold
+  const effectiveHue= isReady?readyHue:isWobbling?Math.round(hue*0.6+readyHue*0.4):hue;
+  const glowColor   = isReady?C.amber:isWobbling?C.green400:`hsl(${hue},70%,58%)`;
+
+  const memStroke=cell.burst?C.red:isConfirmed?C.red:isPending?C.amber:
+    isReady?C.amber:cell.splitting?`hsl(${effectiveHue},85%,68%)`:`hsl(${hue},70%,58%)`;
+  const cytoFill  =cell.burst||isConfirmed?`${C.red}30`:isPending?`${C.amber}30`:
+    isReady?`${C.amber}28`:`hsla(${hue},60%,30%,0.38)`;
+  const nucleusFill=cell.burst||isConfirmed?`${C.red}99`:isPending?`${C.amber}88`:
+    isReady?`${C.amber}cc`:`hsla(${hue},55%,22%,0.8)`;
+  const nucleoFill =cell.burst||isConfirmed?`${C.red}dd`:isPending?`${C.amber}cc`:
+    isReady?`#fff8cc`:`hsla(${hue},75%,70%,0.9)`;
+  const orgFill    =cell.burst||isConfirmed?`${C.red}66`:isPending?`${C.amber}55`:
+    isReady?`${C.amber}77`:`hsla(${hue},60%,50%,0.5)`;
 
   const R=CR;
   const nOX=cell.nucleusOX||0, nOY=cell.nucleusOY||0;
   const nR=Math.round(R*0.34);
 
-  return(
+  return(<>
     <Animated.View style={{position:'absolute',left:cell.x*DISH-R,top:cell.y*DISH-R,opacity:opacityAnim}}>
       <Animated.View style={{transform:[{translateX:floatX},{translateY:floatY},{rotate:wobbleRot}]}}>
         <Animated.View style={{transform:[{scale:birthAnim}]}}>
           <Animated.View style={{transform:[{scale:tier===3?staticScale:breathAnim}]}}>
             {/* Elongation wrapper — rotates to the cell's unique division axis */}
             <Animated.View style={{transform:[{rotate:eDeg},{scaleX:elongSX},{scaleY:elongSY},{rotate:eNegDeg}]}}>
+              {/* Snap scale wrapper — pops outward at the snap moment */}
+              <Animated.View style={{transform:[{scale:snapScale}]}}>
+              {/* Split flash overlay — brief white glow at the snap */}
+              {splitPhase!=='idle'&&<Animated.View style={{position:'absolute',
+                width:R*2.8,height:R*2.8,borderRadius:R*1.4,
+                left:-R*0.4,top:-R*0.4,zIndex:10,pointerEvents:'none',
+                backgroundColor:'#ffffff',opacity:splitFlash}}/>}
               <TouchableOpacity onPress={interactive?()=>onTap(cell.id):undefined} activeOpacity={0.75}
                 style={{width:R*2,height:R*2,borderRadius:R,backgroundColor:cytoFill,
-                  borderWidth:isPending?2.5:2,borderColor:memStroke,
+                  borderWidth:isPending?2.5:isReady?2.5:2,borderColor:memStroke,
                   alignItems:'center',justifyContent:'center',overflow:'visible',
-                  shadowColor:isPending?C.amber:isConfirmed?C.red:memStroke,
-                  shadowOffset:{width:0,height:0},shadowOpacity:isPending?0.8:0.5,
-                  shadowRadius:isPending?8:5,elevation:isPending?5:3}}>
+                  shadowColor:isPending?C.amber:isConfirmed?C.red:isReady?C.amber:memStroke,
+                  shadowOffset:{width:0,height:0},
+                  shadowOpacity:isPending?0.8:isReady?0.9:0.5,
+                  shadowRadius:isPending?8:isReady?14:5,
+                  elevation:isPending?5:isReady?8:3}}>
 
                 {/* Crescent highlight */}
                 <View style={{position:'absolute',top:R*0.08,left:R*0.08,
@@ -1703,8 +1886,8 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
                   <View style={{position:'absolute',width:R*1.1,height:2,backgroundColor:C.red+'cc',transform:[{rotate:'-45deg'}]}}/>
                 </>}
               </TouchableOpacity>
-            </Animated.View>
-
+              </Animated.View>{/* close snapScale */}
+            </Animated.View>{/* close elongation */}
             {/* Pending countdown dots */}
             {isPending&&!cell.burst&&(
               <View style={{position:'absolute',bottom:-8,left:0,right:0,flexDirection:'row',justifyContent:'center',gap:3}}>
@@ -1715,6 +1898,36 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
         </Animated.View>
       </Animated.View>
     </Animated.View>
+    {/* Split burst — particles + ripple at snap moment */}
+    {burstActive && (
+      <SplitBurst
+        x={CR}
+        y={CR}
+        active={burstActive}
+      />
+    )}
+  </>);
+}
+
+// ── Split-ready pulse ring — glows amber when cells are stretching ──────
+function SplitReadyPulse({active}){
+  const pulseAnim=useRef(new Animated.Value(0)).current;
+  useEffect(()=>{
+    if(active){
+      const loop=Animated.loop(Animated.sequence([
+        Animated.timing(pulseAnim,{toValue:1,duration:420,useNativeDriver:true}),
+        Animated.timing(pulseAnim,{toValue:0,duration:420,useNativeDriver:true}),
+      ]));
+      loop.start();
+      return()=>loop.stop();
+    } else {
+      Animated.timing(pulseAnim,{toValue:0,duration:200,useNativeDriver:true}).start();
+    }
+  },[active]);// eslint-disable-line react-hooks/exhaustive-deps
+  const opacity=pulseAnim.interpolate({inputRange:[0,1],outputRange:[0,0.55]});
+  return(
+    <Animated.View style={{position:'absolute',inset:-6,borderRadius:(DISH+12)/2,
+      borderWidth:3,borderColor:C.amber,opacity,pointerEvents:'none'}}/>
   );
 }
 
@@ -1731,9 +1944,17 @@ function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer}){
       const cx=cell.x*DISH, cy=cell.y*DISH;
       // Only spawn particles in tier 1 & 2
       if(totalLive<=TIER2_MAX){
-        if(cell.splitting&&!prev.splitting)for(let i=0;i<8;i++)newP.push({id:`sp_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/8)*Math.PI*2,speed:18+Math.random()*12,color:C.green400,size:4+Math.random()*3});
+        if(cell.splitting&&!prev.splitting){
+          // Main burst ring — 12 green particles
+          for(let i=0;i<12;i++)newP.push({id:`sp_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/12)*Math.PI*2,speed:24+Math.random()*16,color:C.green400,size:5+Math.random()*4});
+          // Gold snap sparks — 6 fast bright particles
+          for(let i=0;i<6;i++)newP.push({id:`sg_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/6)*Math.PI*2+0.26,speed:32+Math.random()*18,color:'#FFD700',size:3+Math.random()*2});
+        }
         if(cell.burst&&!prev.burst)for(let i=0;i<12;i++)newP.push({id:`bp_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/12)*Math.PI*2,speed:22+Math.random()*14,color:C.red,size:3+Math.random()*4});
-        if(cell.isNew&&!prev.isNew)for(let i=0;i<4;i++)newP.push({id:`nb_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/4)*Math.PI*2,speed:8+Math.random()*6,color:C.green300,size:2+Math.random()*2});
+        if(cell.isNew&&!prev.isNew){
+          // Baby cell birth sparkles
+          for(let i=0;i<6;i++)newP.push({id:`nb_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/6)*Math.PI*2,speed:10+Math.random()*8,color:C.green300,size:2.5+Math.random()*2.5});
+        }
       } else {
         // Tier 3: only burst particles
         if(cell.burst&&!prev.burst)for(let i=0;i<6;i++)newP.push({id:`bp3_${cell.id}_${i}_${Date.now()}`,x:cx,y:cy,angle:(i/6)*Math.PI*2,speed:14+Math.random()*8,color:C.red,size:3+Math.random()*2});
@@ -1754,6 +1975,7 @@ function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer}){
         shadowColor:nearGrad?C.amber:ring,shadowOffset:{width:0,height:0},
         shadowOpacity:nearGrad?0.5:0.3,shadowRadius:nearGrad?16:10,elevation:nearGrad?6:4}]}>
         {phase==='splitting'&&<View style={{position:'absolute',inset:6,borderRadius:(DISH-12)/2,borderWidth:1,borderColor:C.green500+'33'}}/>}
+        <SplitReadyPulse active={phase==='splitting'}/>
         {nearGrad&&<View style={{position:'absolute',inset:4,borderRadius:(DISH-8)/2,borderWidth:1.5,borderColor:C.amber+'33'}}/>}
         {cells.map(c=><Cell key={c.id} cell={c} onTap={onTap} interactive={interactive} totalLive={totalLive} roundTimer={roundTimer}/>)}
         {particles.map(p=><Particle key={p.id} {...p} onDone={()=>removeParticle(p.id)}/>)}
@@ -3098,6 +3320,8 @@ function KidGameFlow({kidId,sessionDuration,onSessionEnd}){
   const handleQuit=useCallback(()=>setExpired(true),[]);
   const[kidFeedbackDone,setKidFeedbackDone]=useState(false);
   const[inGamePinGate,setInGamePinGate]=useState(null); // {url, itemName}
+  const[goalJustMet,setGoalJustMet]=useState(false); // true when goal met for first time
+  const[goalMetDismissed,setGoalMetDismissed]=useState(false);
   const liveCount=game?.cells?.filter(c=>!c.burst).length||0;
 
   if(!screen)return<SafeAreaView style={{flex:1,backgroundColor:C.bg,alignItems:'center',justifyContent:'center'}}><Text style={{color:C.textMuted}}>Loading...</Text></SafeAreaView>;
@@ -3416,22 +3640,40 @@ const CELLIE_SUGGESTIONS = [
 
 // CameraView is null in Snack/Expo Go — CameraOverlay shows a placeholder.
 // In the EAS build, swap this line: import {CameraView} from 'expo-camera';
-const CameraView=null; // replace with import for production EAS build
-
 function CameraOverlay({onCapture,onCancel}){
   const cameraRef=useRef(null);
   const[ready,setReady]=useState(false);
+  const[permission,requestPermission]=useCameraPermissions();
 
-  // Expo Go / Snack: no camera — show placeholder
-  if(!CameraView){
+  // Permission not yet determined — request it
+  if(!permission){
     return(
       <View style={{flex:1,backgroundColor:'#000',alignItems:'center',justifyContent:'center',padding:32}}>
         <Text style={{fontSize:64,marginBottom:16}}>📷</Text>
-        <Text style={{color:'#fff',fontWeight:'800',fontSize:20,textAlign:'center',marginBottom:8}}>
-          Camera works in the full app!
+        <Text style={{color:'#fff',fontWeight:'800',fontSize:18,textAlign:'center',marginBottom:16}}>
+          Cellie needs camera access
         </Text>
-        <Text style={{color:'#aaa',fontSize:14,textAlign:'center',marginBottom:32,lineHeight:22}}>
-          Install Money Cells from the App Store to take photos and ask Cellie about real-world purchases.
+        <TouchableOpacity onPress={requestPermission}
+          style={{backgroundColor:C.green500,borderRadius:14,paddingHorizontal:28,paddingVertical:14,marginBottom:12}}>
+          <Text style={{color:C.bg,fontWeight:'800',fontSize:16}}>Allow Camera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onCancel} style={{paddingVertical:8}}>
+          <Text style={{color:'#aaa',fontSize:14}}>Not now</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Permission denied
+  if(!permission.granted){
+    return(
+      <View style={{flex:1,backgroundColor:'#000',alignItems:'center',justifyContent:'center',padding:32}}>
+        <Text style={{fontSize:64,marginBottom:16}}>📷</Text>
+        <Text style={{color:'#fff',fontWeight:'800',fontSize:18,textAlign:'center',marginBottom:12}}>
+          Camera permission needed
+        </Text>
+        <Text style={{color:'#aaa',fontSize:14,textAlign:'center',marginBottom:24,lineHeight:22}}>
+          To analyse items with Cellie Vision, allow camera access in your iPhone Settings → Money Cells → Camera.
         </Text>
         <TouchableOpacity onPress={onCancel}
           style={{backgroundColor:C.green500,borderRadius:14,paddingHorizontal:28,paddingVertical:14}}>
@@ -3440,8 +3682,6 @@ function CameraOverlay({onCapture,onCancel}){
       </View>
     );
   }
-
-  // CameraView is guaranteed non-null here (imported in production EAS build)
   const ActiveCamera = CameraView;
 
   const takePicture=async()=>{
@@ -4143,6 +4383,23 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
       ? totalCellsEarned>=wishItem.cost
       : count>=wishItem.cost)
     :false;
+
+  // ── Detect goal just met (fires once when threshold first crossed) ─────
+  const prevWishReadyRef=useRef(false);
+  useEffect(()=>{
+    if(wishReady&&!prevWishReadyRef.current&&!goalMetDismissed){
+      setGoalJustMet(true);
+    }
+    prevWishReadyRef.current=wishReady;
+  },[wishReady,goalMetDismissed]);// eslint-disable-line react-hooks/exhaustive-deps
+
+  // Also check immediately on mount — catches the "goal already affordable" case
+  useEffect(()=>{
+    if(wishItem&&wishReady&&!goalMetDismissed){
+      setGoalJustMet(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   const nearGrad=count>=COLONY_WARN;
   const colonyNum=game.colonyNumber||1;
   const instrText=confirmedCount>0?`😬 ${confirmedCount} confirmed · Tap again to undo!`:pendingCount>0?`⚡ Tap again to confirm · wait 3s to change your mind!`:'✨ Tap a cell to think about spending · leave them to multiply! 🧬';
@@ -4194,6 +4451,63 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
 
   // One-click: select cells for built-in goals, or fire share for Amazon goals
   const canBuyWish = wishItem && wishReady && phase === 'active';
+
+  // ── Goal Already Met notification component ───────────────────────────
+  const GoalMetBanner = goalJustMet && wishItem && !goalMetDismissed ? (
+    <View style={{
+      position:'absolute', top:0, left:0, right:0, bottom:0,
+      backgroundColor:'rgba(0,0,0,0.75)',
+      alignItems:'center', justifyContent:'center',
+      zIndex:50, padding:24,
+    }}>
+      <View style={{
+        backgroundColor:C.card, borderRadius:20,
+        borderWidth:2, borderColor:C.green500,
+        padding:24, width:'100%', gap:16, alignItems:'center',
+      }}>
+        <Text style={{fontSize:56}}>{wishItem.emoji||'🎯'}</Text>
+        <Text style={{color:C.greenL, fontWeight:'800', fontSize:22,
+          textAlign:'center'}}>
+          You can already afford it! 🎉
+        </Text>
+        <Text style={{color:C.text, fontSize:15, textAlign:'center',
+          lineHeight:22}}>
+          {'Your starting cells are enough to get the '}
+          <Text style={{fontWeight:'800', color:C.green400}}>{wishItem.name}</Text>{'!'}
+        </Text>
+        <View style={{backgroundColor:C.greenD, borderRadius:12,
+          borderWidth:1, borderColor:C.green700,
+          padding:12, width:'100%', alignItems:'center', gap:4}}>
+          <Text style={{color:C.muted, fontSize:12}}>But here's the thing:</Text>
+          <Text style={{color:C.white, fontSize:13, textAlign:'center', lineHeight:19}}>
+            {'If you keep saving instead of spending, your cells will keep splitting and multiplying! 🧬'}
+            <Text style={{color:C.amber, fontWeight:'700'}}>
+              Could you save for something even bigger?
+            </Text>
+          </Text>
+        </View>
+        <View style={{flexDirection:'row', gap:12, width:'100%'}}>
+          <TouchableOpacity
+            onPress={()=>{setGoalJustMet(false);setGoalMetDismissed(true);handleBuyWishItem();}}
+            style={{flex:1, backgroundColor:C.green500, borderRadius:12,
+              padding:14, alignItems:'center'}}>
+            <Text style={{color:C.bg, fontWeight:'800', fontSize:14}}>
+              {wishItem.isAmazon?'Buy it now 🛒':'Spend cells 💸'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={()=>{setGoalJustMet(false);setGoalMetDismissed(true);}}
+            style={{flex:1, backgroundColor:C.surface, borderRadius:12,
+              borderWidth:1, borderColor:C.border,
+              padding:14, alignItems:'center'}}>
+            <Text style={{color:C.greenL, fontWeight:'800', fontSize:14}}>
+              Keep saving! 🌱
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  ) : null;
   const handleBuyWishItem = useCallback(()=>{
     if(!wishItem||!canBuyWish)return;
     if(wishItem.isAmazon){
@@ -4228,6 +4542,9 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
         onCellie={()=>{setPaused(false);setCellieOpen(true);}}
         onQuit={()=>{setPaused(false);onQuit();}}
       />
+
+      {/* ── Goal already met notification */}
+      {GoalMetBanner}
 
       {/* ── Cellie modal ─────────────────────────────────────────────── */}
       <CellieModal
@@ -4283,7 +4600,19 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
         <View style={{position:'relative'}}>
           <DishArea
             cells={game.cells}
-            onTap={id=>dispatch({type:'TOGGLE',id})}
+            onTap={id=>{
+              const cell=game.cells.find(c=>c.id===id);
+              if(!cell||cell.burst)return;
+              // Haptic intensity matches commitment level
+              if(cell.spendState==='none'){
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              } else if(cell.spendState==='pending'){
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } else {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); // undo
+              }
+              dispatch({type:'TOGGLE',id});
+            }}
             interactive={phase==='active'}
             phase={phase}
             sessionRemaining={sessionRemaining}
@@ -4448,7 +4777,10 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
               Do you really need {SHOP_ITEMS.find(i=>i.id===game.flashDeal.itemId)?.name||'this'} right now?
             </Text>
             <View style={{flexDirection:'row',gap:10,width:'100%'}}>
-              <TouchableOpacity onPress={()=>setShowDealConfirm(false)}
+              <TouchableOpacity onPress={()=>{
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                setShowDealConfirm(false);
+              }}
                 style={{flex:1.2,backgroundColor:C.green900,borderRadius:12,padding:14,
                   alignItems:'center',borderWidth:2,borderColor:C.green500}}>
                 <Text style={{color:C.green400,fontWeight:'800',fontSize:14}}>
