@@ -3320,8 +3320,6 @@ function KidGameFlow({kidId,sessionDuration,onSessionEnd}){
   const handleQuit=useCallback(()=>setExpired(true),[]);
   const[kidFeedbackDone,setKidFeedbackDone]=useState(false);
   const[inGamePinGate,setInGamePinGate]=useState(null); // {url, itemName}
-  const[goalJustMet,setGoalJustMet]=useState(false); // true when goal met for first time
-  const[goalMetDismissed,setGoalMetDismissed]=useState(false);
   const liveCount=game?.cells?.filter(c=>!c.burst).length||0;
 
   if(!screen)return<SafeAreaView style={{flex:1,backgroundColor:C.bg,alignItems:'center',justifyContent:'center'}}><Text style={{color:C.textMuted}}>Loading...</Text></SafeAreaView>;
@@ -4263,6 +4261,8 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
   const[dealExpiredMsg,setDealExpiredMsg]=useState(null);
   const[ceremonyItem,setCeremonyItem]=useState(null);
   const[prevResist,setPrevResist]=useState(0);
+  const[goalJustMet,setGoalJustMet]=useState(false);
+  const[goalMetDismissed,setGoalMetDismissed]=useState(false);
   const[paused,setPaused]=useState(false);
   const[showSaveConfirm,setShowSaveConfirm]=useState(false);
   const[showDealConfirm,setShowDealConfirm]=useState(false);
