@@ -24,7 +24,7 @@ import { createClient } from '@supabase/supabase-js';
 // Replace with your actual project URL and anon key from Supabase dashboard
 // Settings → API → Project URL and anon/public key
 const SUPABASE_URL  = 'https://wztykysqvnngsnmadrdt.supabase.co';
-const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY'; // Settings → API → anon key
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6dHlreXNxdm5uZ3NubWFkcmR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTA5MjUsImV4cCI6MjA5MDU4NjkyNX0.l4qJz6_lX83H1vAxbv5vYWVugtwCl_PXrl6gVMd51Hw'; // Settings → API → anon key
 
 // Custom storage adapter using SecureStore for auth tokens
 const ExpoSecureStoreAdapter = {
@@ -2960,6 +2960,88 @@ function StartSessionScreen({kidId,onConfirm,onBack}){
   );
 }
 
+// ── CoachingCard — live parent coaching from Cellie ─────────────────────
+function CoachingCard({userId, kids}){
+  const[loading,setLoading]=useState(false);
+  const[insight,setInsight]=useState(null);
+  const[error,setError]=useState(null);
+
+  const fetchInsight=async()=>{
+    setLoading(true);setError(null);
+    try{
+      // Build session context from kids data
+      const totalSessions=kids.reduce((a,k)=>(a+(k.sessions?.length||0)),0);
+      const totalPlayTime=kids.reduce((a,k)=>(a+(k.totalPlayTime||0)),0);
+      const kidNames=kids.map(k=>k.name).join(', ');
+      const question=`Give me coaching insights for a parent with ${kids.length} child(ren) named ${kidNames||'my kids'}. They have completed ${totalSessions} sessions with ${Math.round(totalPlayTime/60)} total minutes of play. What financial literacy concepts should I reinforce at home this week?`;
+
+      const resp=await fetch('https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          mode:'parent',
+          question,
+          kidName:kidNames||'my child',
+          kidAge:10,
+          sessionCells:20,
+          round:totalSessions,
+          totalSessions,
+          totalPlayTime,
+        }),
+      });
+      const data=await resp.json();
+      setInsight(data.answer||'Unable to generate insight right now.');
+    }catch(e){
+      setError('Could not load insights. Check your connection.');
+    }
+    setLoading(false);
+  };
+
+  if(insight){
+    return(
+      <View style={{backgroundColor:C.purple+'15',borderRadius:14,
+        borderWidth:1,borderColor:C.purple+'44',padding:16,gap:12}}>
+        <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+          <Text style={{fontSize:20}}>🧠</Text>
+          <Text style={{color:C.purple,fontWeight:'800',fontSize:14}}>
+            Cellie's Coaching Insight
+          </Text>
+        </View>
+        <Text style={{color:C.text,fontSize:13,lineHeight:20}}>{insight}</Text>
+        <TouchableOpacity onPress={()=>setInsight(null)}
+          style={{alignSelf:'flex-start',paddingVertical:4}}>
+          <Text style={{color:C.textMuted,fontSize:12}}>Get new insight</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return(
+    <TouchableOpacity
+      onPress={fetchInsight}
+      disabled={loading}
+      style={{backgroundColor:C.purple+'15',borderRadius:14,
+        borderWidth:1,borderColor:C.purple+'44',
+        padding:16,gap:10,opacity:loading?0.7:1}}>
+      <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
+        <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+          <Text style={{fontSize:20}}>🧠</Text>
+          <View>
+            <Text style={{color:C.purple,fontWeight:'800',fontSize:14}}>
+              {loading?'Thinking...':'Get coaching insight'}
+            </Text>
+            <Text style={{color:C.textMuted,fontSize:11}}>
+              {loading?'Cellie is reviewing your sessions...':'Tap for AI-powered parenting tips'}
+            </Text>
+          </View>
+        </View>
+        {!loading&&<Text style={{fontSize:20}}>→</Text>}
+      </View>
+      {error&&<Text style={{color:C.red,fontSize:12}}>{error}</Text>}
+    </TouchableOpacity>
+  );
+}
+
 function ParentDashboardScreen({onBack}){
   const{state}=useApp();
   const[sel,setSel]=useState(null);
@@ -3128,25 +3210,14 @@ function ParentDashboardScreen({onBack}){
               <Text style={{fontSize:28}}>🚀</Text>
               <View style={{flex:1}}>
                 <Text style={{color:C.purple,fontWeight:'800',fontSize:15}}>
-                  Cellie Pro
+                  AI Parent Coaching
                 </Text>
                 <Text style={{color:C.textMuted,fontSize:12}}>
-                  The full coaching experience — coming soon
+                  Powered by Claude — based on your sessions
                 </Text>
               </View>
             </View>
-            {[
-              ['📷','Cellie Vision — photo purchase analysis'],
-              ['🧠','AI weekly parent coaching insights'],
-              ['📊','Adaptive quiz difficulty'],
-              ['👨‍👩‍👧','Multiple kid profiles'],
-              ['🛍️','Amazon wish goal integration'],
-            ].map(([icon,label])=>(
-              <View key={label} style={{flexDirection:'row',alignItems:'center',gap:8}}>
-                <Text style={{fontSize:14,opacity:0.5}}>{icon}</Text>
-                <Text style={{color:C.textFaint,fontSize:12}}>{label}</Text>
-              </View>
-            ))}
+            <CoachingCard userId={state.supabaseUser?.id} kids={state.parent?.kids||[]}/>
             <View style={{backgroundColor:C.purple+'22',borderRadius:12,
               padding:14,alignItems:'center',marginTop:4,
               borderWidth:1,borderColor:C.purple+'44'}}>
@@ -3280,6 +3351,30 @@ function KidGameFlow({kidId,sessionDuration,onSessionEnd}){
   const[screen,setScreen]=useState(null);
   const[expired,setExpired]=useState(false);
   const[cellieOpen,setCellieOpen]=useState(false);
+  const[cellieBubble,setCellieBubble]=useState(false); // animated "Ask me!" prompt
+  const cellieBubbleAnim=useRef(new Animated.Value(0)).current;
+  const cellieBubblePulse=useRef(new Animated.Value(1)).current;
+
+  // Show animated bubble after round 3 if Cellie hasn't been used
+  useEffect(()=>{
+    if(!game)return;
+    if(game.round>=3&&!cellieBubble&&!cellieOpen){
+      setCellieBubble(true);
+      // Slide in
+      Animated.spring(cellieBubbleAnim,{toValue:1,useNativeDriver:true,tension:60,friction:8}).start();
+      // Pulse loop
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(cellieBubblePulse,{toValue:1.06,duration:700,useNativeDriver:true}),
+          Animated.timing(cellieBubblePulse,{toValue:1.0, duration:700,useNativeDriver:true}),
+        ])
+      ).start();
+      // Auto-dismiss after 6 seconds
+      setTimeout(()=>{
+        Animated.timing(cellieBubbleAnim,{toValue:0,duration:300,useNativeDriver:true}).start(()=>setCellieBubble(false));
+      },6000);
+    }
+  },[game?.round]);// eslint-disable-line react-hooks/exhaustive-deps
   const[sessionRemaining,setSessionRemaining]=useState(sessionDuration);
   const kid=state.parent?.kids?.find(k=>k.id===kidId);
 
@@ -3357,7 +3452,7 @@ function KidGameFlow({kidId,sessionDuration,onSessionEnd}){
     <View style={{flex:1}}>
       {screen==='setup'     &&<KidSetupScreen kidName={kid?.name||'Friend'} onDone={(nm,p,r,w,g)=>{gameDispatch({type:'INIT',name:nm,principal:p,rate:r,wishId:w,goal:g});setScreen('onboard');}}/>}
       {screen==='onboard'   &&<OnboardingScreen kidName={kid?.name||'Friend'} onDone={()=>{gameDispatch({type:'SEEN_ONBOARDING'});setScreen('game');}}/>}
-      {screen==='game'      &&game&&<KidGameScreen sessionRemaining={sessionRemaining} sessionTotal={sessionDuration} cellieOpen={cellieOpen} setCellieOpen={setCellieOpen} onResults={()=>setScreen('results')} onLevelUp={()=>setScreen('levelup')} onShop={()=>setScreen('shop')} onMuseum={()=>setScreen('museum')} onQuit={handleQuit}/>}
+      {screen==='game'      &&game&&<KidGameScreen sessionRemaining={sessionRemaining} sessionTotal={sessionDuration} cellieOpen={cellieOpen} setCellieOpen={(v)=>{setCellieOpen(v);if(v){setCellieBubble(false);}}} cellieBubble={cellieBubble} cellieBubbleAnim={cellieBubbleAnim} cellieBubblePulse={cellieBubblePulse} setCellieBubble={setCellieBubble} onResults={()=>setScreen('results')} onLevelUp={()=>setScreen('levelup')} onShop={()=>setScreen('shop')} onMuseum={()=>setScreen('museum')} onQuit={handleQuit}/>}
       {screen==='results'   &&<KidResultsScreen onNext={()=>setScreen('game')} onShop={()=>setScreen('shop')}/>}
       {screen==='levelup'   &&<KidLevelUpScreen onContinue={()=>setScreen('game')}/>}
       {screen==='graduating'&&game&&<ColonyGraduationScreen game={game} onContinue={handleGraduate}/>}
@@ -3976,6 +4071,8 @@ function KidSetupScreen({kidName,onDone}){
   const[selectedGoal,setSelectedGoal]=useState(null); // full goal object
   const[goalQuery,setGoalQuery]=useState('');
   const[showCustom,setShowCustom]=useState(false);
+  const[showVision,setShowVision]=useState(false);
+  const[visionLoading,setVisionLoading]=useState(false);
   const AMOUNTS=[1,5,10,20,50]; // max 50 = colony cap
   const ROPTS=[{id:'slow',...RATE_STORIES.slow,locked:false},{id:'medium',...RATE_STORIES.medium,locked:false},{id:'fast',...RATE_STORIES.fast,locked:true}];
 
@@ -4102,6 +4199,87 @@ function KidSetupScreen({kidName,onDone}){
                 <Text style={{color:C.textMuted,fontSize:12}}>Any toy from Amazon</Text>
               </View>
             </TouchableOpacity>
+
+            {/* Scan with Cellie Vision */}
+            <TouchableOpacity onPress={()=>setShowVision(true)}
+              style={{flexDirection:'row',alignItems:'center',gap:12,
+                backgroundColor:C.blue+'15',borderRadius:12,
+                borderWidth:1.5,borderColor:C.blue+'44',padding:14}}>
+              <View style={{width:44,height:44,borderRadius:22,
+                backgroundColor:C.blue+'22',alignItems:'center',justifyContent:'center'}}>
+                <Text style={{fontSize:22}}>📷</Text>
+              </View>
+              <View style={{flex:1}}>
+                <Text style={{color:C.blue,fontWeight:'800',fontSize:14}}>
+                  Scan with Cellie Vision
+                </Text>
+                <Text style={{color:C.textMuted,fontSize:12}}>
+                  Point at any toy — Cellie sets up the goal!
+                </Text>
+              </View>
+              <Text style={{fontSize:16}}>✨</Text>
+            </TouchableOpacity>
+
+            {/* Cellie Vision Camera for goal setup */}
+            {showVision&&(
+              <Modal visible statusBarTranslucent animationType="slide">
+                <CameraOverlay
+                  onCancel={()=>{setShowVision(false);setVisionLoading(false);}}
+                  onCapture={async(base64)=>{
+                    setShowVision(false);
+                    setVisionLoading(true);
+                    try{
+                      const resp=await fetch(
+                        'https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie',
+                        {method:'POST',headers:{'Content-Type':'application/json'},
+                          body:JSON.stringify({
+                            mode:'vision',image:base64,
+                            kidName:kidName||'friend',kidAge:8,sessionCells:20,
+                            goalSetup:true, // hint to return structured data
+                          })}
+                      );
+                      const data=await resp.json();
+                      const answer=data.answer||'';
+                      // Parse Cellie's response for name, emoji, price
+                      const nameMatch=answer.match(/\*\*([^*]+)\*\*/);
+                      const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
+                      const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
+                      const name=nameMatch?nameMatch[1]:answer.split('.')[0].replace(/[🎯📦🛒]/g,'').trim().slice(0,40)||'My Goal';
+                      const price=priceMatch?parseFloat(priceMatch[1]):20;
+                      const emoji=emojiMatch?emojiMatch[0]:'🎯';
+                      const cost=Math.max(1,Math.round(price));
+                      // Auto-populate goal
+                      const newGoal={
+                        id:'vision_'+Date.now(),
+                        name,emoji,
+                        cost,priceUsd:price,
+                        isAmazon:true,
+                        searchQ:name,
+                        color:C.blue,
+                        fromVision:true,
+                        visionAnswer:answer,
+                      };
+                      setSelectedGoal(newGoal);
+                      setStep(1);
+                    }catch(e){
+                      console.warn('Vision goal setup failed:',e);
+                    }
+                    setVisionLoading(false);
+                  }}
+                />
+              </Modal>
+            )}
+
+            {/* Vision loading overlay */}
+            {visionLoading&&(
+              <View style={{position:'absolute',inset:0,backgroundColor:'rgba(0,0,0,0.7)',
+                alignItems:'center',justifyContent:'center',zIndex:99,borderRadius:12}}>
+                <Text style={{fontSize:48,marginBottom:12}}>🧬</Text>
+                <Text style={{color:C.greenL,fontWeight:'800',fontSize:16}}>
+                  Cellie is checking it out...
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -4255,7 +4433,7 @@ function PauseModal({visible,onResume,onShop,onMuseum,onCellie,onQuit}){
   );
 }
 
-function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,onResults,onLevelUp,onShop,onMuseum,onQuit}){
+function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,cellieBubble,cellieBubbleAnim,cellieBubblePulse,setCellieBubble,onResults,onLevelUp,onShop,onMuseum,onQuit}){
   const{game,dispatch}=useGame();
   const{state:appState}=useApp();
   const[dealExpiredMsg,setDealExpiredMsg]=useState(null);
@@ -4532,6 +4710,36 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,o
   return(
     <SafeAreaView style={{flex:1,backgroundColor:C.bg}}>
       {ceremonyItem&&(<Modal transparent animationType="none" statusBarTranslucent><BuyCeremony item={ceremonyItem} isDeal={!!ceremonyItem.isDeal} onComplete={()=>setCeremonyItem(null)}/></Modal>)}
+
+      {/* Cellie "Ask me something!" animated bubble */}
+      {cellieBubble&&(
+        <Animated.View style={{
+          position:'absolute', bottom:88, right:14,
+          opacity:cellieBubbleAnim,
+          transform:[{scale:cellieBubblePulse},{translateY:cellieBubbleAnim.interpolate({inputRange:[0,1],outputRange:[20,0]})}],
+          zIndex:30,
+        }}>
+          <TouchableOpacity
+            onPress={()=>{setCellieOpen(true);setCellieBubble(false);}}
+            style={{flexDirection:'row',alignItems:'center',gap:8,
+              backgroundColor:C.blue,borderRadius:20,
+              paddingHorizontal:14,paddingVertical:10,
+              shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.3,shadowRadius:6,
+            }}>
+            <Text style={{fontSize:18}}>🧬</Text>
+            <Text style={{color:'#fff',fontWeight:'800',fontSize:13}}>
+              Ask me something! ✨
+            </Text>
+          </TouchableOpacity>
+          {/* Speech bubble tail */}
+          <View style={{position:'absolute',bottom:-7,right:20,
+            width:0,height:0,
+            borderLeftWidth:8,borderRightWidth:8,borderTopWidth:8,
+            borderLeftColor:'transparent',borderRightColor:'transparent',
+            borderTopColor:C.blue,
+          }}/>
+        </Animated.View>
+      )}
 
       {/* ── Pause modal ──────────────────────────────────────────────── */}
       <PauseModal
