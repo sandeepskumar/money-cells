@@ -43,7 +43,12 @@
         "autoIncrement": "versionCode"
       },
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wztykysqvnngsnmadrdt.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6dHlreXNxdm5uZ3NubWFkcmR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTA5MjUsImV4cCI6MjA5MDU4NjkyNX0.l4qJz6_lX83H1vAxbv5vYWVugtwCl_PXrl6gVMd51Hw",
+        "EXPO_PUBLIC_CELLIE_URL": "https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie",
+        "EXPO_PUBLIC_CELLIE_VISION_URL": "https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie",
+        "EXPO_PUBLIC_CELLIE_IMAGE_URL": "https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie"
       }
     }
   },
