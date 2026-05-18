@@ -10,7 +10,7 @@ import React, {
   createContext, useContext, useCallback, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Animated,
+  View, Text, TouchableOpacity, StyleSheet, Animated, ActivityIndicator,
   ScrollView, TextInput, Dimensions, SafeAreaView, Modal, Linking,
   Image, Alert,
 } from 'react-native';
@@ -112,17 +112,10 @@ const AMAZON_CATALOG = [
   {id:'az15',emoji:'🪀',name:'Duncan Butterfly Yo-Yo',       category:'Toys',           priceUsd:7.99, searchQ:'duncan butterfly yo-yo classic'},
 ];
 // ── Cellie AI endpoint ────────────────────────────────────────────────────
-// Set to your Supabase Edge Function URL to enable live AI responses.
-// Leave as null to use the built-in keyword fallback (good for Expo Go testing).
-const CELLIE_URL = null;
-// const CELLIE_URL = 'https://YOUR_PROJECT.supabase.co/functions/v1/cellie';
-
-// ── Cellie Vision endpoint ─────────────────────────────────────────────────
-const CELLIE_VISION_URL = null;
-// const CELLIE_VISION_URL = 'https://YOUR_PROJECT.supabase.co/functions/v1/cellie-vision';
-
-// Goal image generation — disabled
-const CELLIE_IMAGE_URL = null;
+// AI endpoints — baked in at build time from .env (EXPO_PUBLIC_* vars)
+const CELLIE_URL        = process.env.EXPO_PUBLIC_CELLIE_URL        || null;
+const CELLIE_VISION_URL = process.env.EXPO_PUBLIC_CELLIE_VISION_URL || null;
+const CELLIE_IMAGE_URL  = process.env.EXPO_PUBLIC_CELLIE_IMAGE_URL  || null;
 
 function openAmazon(query,tag){Linking.openURL(`https://www.amazon.com/s?k=${encodeURIComponent(query)}&tag=${tag||'moneycells-20'}&linkCode=ur2`).catch(()=>{});}
 
@@ -3738,8 +3731,46 @@ function CameraOverlay({onCapture,onCancel}){
   const[ready,setReady]=useState(false);
   const[permission,requestPermission]=useCameraPermissions();
 
-  // Permission not yet determined — request it
-  if(!permission){
+  // Auto-request on mount — skips the extra tap
+  useEffect(()=>{
+    if(permission===null)return;           // still loading
+    if(!permission.granted&&permission.canAskAgain){requestPermission();}
+  },[permission?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Loading (permission state not yet known) ───────────────────────────────
+  if(permission===null){
+    return(
+      <View style={{flex:1,backgroundColor:'#000',alignItems:'center',justifyContent:'center'}}>
+        <ActivityIndicator size="large" color={C.green400}/>
+        <Text style={{color:'#aaa',marginTop:12,fontSize:13}}>Checking camera access…</Text>
+      </View>
+    );
+  }
+
+  // ── Permanently denied — send to Settings ──────────────────────────────────
+  if(!permission.granted&&!permission.canAskAgain){
+    return(
+      <View style={{flex:1,backgroundColor:'#000',alignItems:'center',justifyContent:'center',padding:32}}>
+        <Text style={{fontSize:64,marginBottom:16}}>📷</Text>
+        <Text style={{color:'#fff',fontWeight:'800',fontSize:18,textAlign:'center',marginBottom:12}}>
+          Camera access blocked
+        </Text>
+        <Text style={{color:'#aaa',fontSize:14,textAlign:'center',marginBottom:28,lineHeight:22}}>
+          Go to iPhone Settings → Money Cells → Camera and turn it on.
+        </Text>
+        <TouchableOpacity onPress={()=>Linking.openSettings()}
+          style={{backgroundColor:C.green500,borderRadius:14,paddingHorizontal:28,paddingVertical:14,marginBottom:12}}>
+          <Text style={{color:C.bg,fontWeight:'800',fontSize:16}}>Open Settings</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onCancel} style={{paddingVertical:8}}>
+          <Text style={{color:'#aaa',fontSize:14}}>Not now</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // ── Can still ask — show button (auto-triggered by useEffect above) ────────
+  if(!permission.granted){
     return(
       <View style={{flex:1,backgroundColor:'#000',alignItems:'center',justifyContent:'center',padding:32}}>
         <Text style={{fontSize:64,marginBottom:16}}>📷</Text>
@@ -3757,32 +3788,19 @@ function CameraOverlay({onCapture,onCancel}){
     );
   }
 
-  // Permission denied
-  if(!permission.granted){
-    return(
-      <View style={{flex:1,backgroundColor:'#000',alignItems:'center',justifyContent:'center',padding:32}}>
-        <Text style={{fontSize:64,marginBottom:16}}>📷</Text>
-        <Text style={{color:'#fff',fontWeight:'800',fontSize:18,textAlign:'center',marginBottom:12}}>
-          Camera permission needed
-        </Text>
-        <Text style={{color:'#aaa',fontSize:14,textAlign:'center',marginBottom:24,lineHeight:22}}>
-          To analyse items with Cellie Vision, allow camera access in your iPhone Settings → Money Cells → Camera.
-        </Text>
-        <TouchableOpacity onPress={onCancel}
-          style={{backgroundColor:C.green500,borderRadius:14,paddingHorizontal:28,paddingVertical:14}}>
-          <Text style={{color:C.bg,fontWeight:'800',fontSize:16}}>← Back to Cellie</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-  const ActiveCamera = CameraView;
-
   const takePicture=async()=>{
     if(!cameraRef.current||!ready)return;
     try{
       const photo=await cameraRef.current.takePictureAsync({
-        base64:true,quality:0.5,skipProcessing:true,
+        base64:true,quality:0.7,
+        // skipProcessing omitted — it prevents base64 from being populated on iOS
       });
+      if(!photo?.base64){
+        console.warn('Camera: base64 empty — retrying');
+        const retry=await cameraRef.current.takePictureAsync({base64:true});
+        if(retry?.base64)onCapture(retry.base64);
+        return;
+      }
       onCapture(photo.base64);
     }catch(e){console.warn('Camera error',e);}
   };
@@ -3835,24 +3853,37 @@ function CameraOverlay({onCapture,onCancel}){
 // ── Cellie vision analysis — calls Claude vision API via Edge Function ──────
 // In Snack: returns a mock response. In production: calls Supabase Edge Function.
 async function analysePurchase(base64Image,kidName,kidAge,sessionCells,wishItem){
+  if(!base64Image)return defaultVisionResponse(wishItem); // guard — empty image
   if(CELLIE_VISION_URL){
     try{
       const res=await fetch(CELLIE_VISION_URL,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({image:base64Image,kidName,kidAge,sessionCells,
-          wishItemName:wishItem?.name,wishItemCost:wishItem?.cost}),
+        body:JSON.stringify({
+          mode:'vision',                              // explicit — never falls through to chat
+          image:base64Image,
+          question:'Is this worth buying with my cells?', // satisfies queryText check
+          kidName,kidAge,sessionCells,
+          wishItemName:wishItem?.name,wishItemCost:wishItem?.cost,
+        }),
       });
-      const data=await res.json();
-      return data.answer||'Hmm, I had trouble seeing that! Try again? 🧬';
+      if(res.ok){
+        const data=await res.json();
+        return data.answer||defaultVisionResponse(wishItem);
+      }
+      const errText=await res.text().catch(()=>res.status);
+      console.warn('Cellie Vision HTTP error:',res.status,errText);
     }catch(e){
-      console.warn('Cellie Vision error',e);
-      return 'Oops, I had trouble with that photo! Try asking me a question instead 🧬';
+      console.warn('Cellie Vision failed:',e);
     }
   }
-  // Mock response when no vision URL is set
-  await new Promise(r=>setTimeout(r,1200));
-  return 'Hmm, I can see something interesting there! 🧬 In the full app, I analyze exactly what it costs and whether it is worth your cells.\n\n🔍 How much does it cost?\n⏱ Does it last or disappear quickly?\n🧬 How many cells would you give up?\n💡 Is there something better for the same price?';
+  return defaultVisionResponse(wishItem);
+}
+function defaultVisionResponse(wishItem){
+  if(wishItem){
+    return `I can see you're thinking about buying something! 🧬 You're saving up for ${wishItem.name} (${wishItem.cost} cells). Is this the item you're looking at? Remember: every cell you spend now can't multiply next round. Is it worth it, or can you wait a little longer?`;
+  }
+  return "Interesting item! 🔬 Before you decide, ask yourself: is this something I really need, or is it something I just want right now? Your cells could keep multiplying if you wait — like seeds growing into a tree! What do you think?";
 }
 
 
