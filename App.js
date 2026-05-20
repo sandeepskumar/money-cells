@@ -3854,31 +3854,32 @@ function CameraOverlay({onCapture,onCancel}){
 }
 
 // ── Cellie vision analysis — calls Claude vision API via Edge Function ──────
-// In Snack: returns a mock response. In production: calls Supabase Edge Function.
+const CELLIE_ENDPOINT='https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie';
 async function analysePurchase(base64Image,kidName,kidAge,sessionCells,wishItem){
   if(!base64Image)return defaultVisionResponse(wishItem); // guard — empty image
-  if(CELLIE_VISION_URL){
-    try{
-      const res=await fetch(CELLIE_VISION_URL,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          mode:'vision',                              // explicit — never falls through to chat
-          image:base64Image,
-          question:'Is this worth buying with my cells?', // satisfies queryText check
-          kidName,kidAge,sessionCells,
-          wishItemName:wishItem?.name,wishItemCost:wishItem?.cost,
-        }),
-      });
-      if(res.ok){
-        const data=await res.json();
-        return data.answer||defaultVisionResponse(wishItem);
-      }
-      const errText=await res.text().catch(()=>res.status);
-      console.warn('Cellie Vision HTTP error:',res.status,errText);
-    }catch(e){
-      console.warn('Cellie Vision failed:',e);
+  // Use env var if baked in, otherwise fall back to hardcoded endpoint
+  // (EXPO_PUBLIC_* inlining from eas.json is unreliable; hardcode is safe — URL is not a secret)
+  const url=CELLIE_VISION_URL||CELLIE_ENDPOINT;
+  try{
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        mode:'vision',
+        image:base64Image,
+        question:'Is this worth buying with my cells?',
+        kidName,kidAge,sessionCells,
+        wishItemName:wishItem?.name,wishItemCost:wishItem?.cost,
+      }),
+    });
+    if(res.ok){
+      const data=await res.json();
+      return data.answer||defaultVisionResponse(wishItem);
     }
+    const errText=await res.text().catch(()=>res.status);
+    console.warn('Cellie Vision HTTP error:',res.status,errText);
+  }catch(e){
+    console.warn('Cellie Vision failed:',e);
   }
   return defaultVisionResponse(wishItem);
 }
@@ -3915,10 +3916,10 @@ function CellieModal({visible,onClose,kidName,kidAge,sessionCells,round,streak,r
     setMessages(m=>[...m,{role:'kid',text:question}]);
     setLoading(true);
     let answer;
-    if(CELLIE_URL){
-      // ── Live Claude via Supabase Edge Function ──────────────────────
+    {
+      // ── Live Claude via Supabase Edge Function (hardcoded fallback if env var missing) ──
       try{
-        const res=await fetch(CELLIE_URL,{
+        const res=await fetch(CELLIE_URL||CELLIE_ENDPOINT,{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({question,kidName,kidAge,
@@ -3929,12 +3930,10 @@ function CellieModal({visible,onClose,kidName,kidAge,sessionCells,round,streak,r
         answer=data.answer||cellieLookup(question);
       }catch(e){
         console.warn('Cellie API error, falling back to keyword mode',e);
+        // ── Keyword fallback (offline / error) ───────────────────────
+        await new Promise(r=>setTimeout(r,600+Math.random()*400));
         answer=cellieLookup(question);
       }
-    } else {
-      // ── Keyword fallback (Expo Go / offline) ────────────────────────
-      await new Promise(r=>setTimeout(r,600+Math.random()*400));
-      answer=cellieLookup(question);
     }
     setMessages(m=>[...m,{role:'cellie',text:answer}]);
     setLoading(false);
