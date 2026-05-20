@@ -5993,6 +5993,11 @@ function UnifiedShopScreen({onBack,kidName}){
   const[shareItem,setShareItem]=useState(null);
   const[showCustomModal,setShowCustomModal]=useState(false);
   const[pinGate,setPinGate]=useState(null); // {action:fn, title, subtitle} | null
+  const[showVisionCamera,setShowVisionCamera]=useState(false);
+  const[visionLoading,setVisionLoading]=useState(false);
+  const[pendingVisionGoal,setPendingVisionGoal]=useState(null);
+  const[visionEditName,setVisionEditName]=useState('');
+  const[visionEditCost,setVisionEditCost]=useState('');
   if(!game)return null;
 
   const count=game.cells.filter(c=>!c.burst).length;
@@ -6172,6 +6177,89 @@ function UnifiedShopScreen({onBack,kidName}){
             Enter the name and price — we'll build the search link automatically
           </Text>
         </TouchableOpacity>
+
+        {/* ── Cellie Vision: photo → goal ────────────────────────────── */}
+        {pendingVisionGoal?(
+          <View style={{backgroundColor:C.card,borderRadius:16,borderWidth:2,
+            borderColor:C.blue+'66',padding:16,gap:12,marginTop:4}}>
+            <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+              <Text style={{fontSize:28}}>{pendingVisionGoal.emoji}</Text>
+              <View style={{flex:1}}>
+                <Text style={{color:C.text,fontWeight:'800',fontSize:13}}>Cellie spotted this!</Text>
+                <Text style={{color:C.textMuted,fontSize:11,marginTop:2}}>Edit if needed, then add to goals</Text>
+              </View>
+              <TouchableOpacity onPress={()=>{setPendingVisionGoal(null);setVisionEditName('');setVisionEditCost('');}}>
+                <Text style={{color:C.textMuted,fontSize:22}}>×</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Cellie's verdict */}
+            <View style={{backgroundColor:C.surface,borderRadius:10,padding:12,borderLeftWidth:3,borderLeftColor:C.blue}}>
+              <Text style={{color:C.text,fontSize:12,lineHeight:18}}>{pendingVisionGoal.visionAnswer}</Text>
+            </View>
+            {/* Editable name */}
+            <View style={{gap:4}}>
+              <Text style={{color:C.textMuted,fontSize:11,fontWeight:'700'}}>ITEM NAME</Text>
+              <TextInput value={visionEditName} onChangeText={setVisionEditName}
+                style={{backgroundColor:C.surface,borderRadius:10,borderWidth:1.5,
+                  borderColor:C.border,color:C.text,fontSize:14,
+                  paddingHorizontal:12,paddingVertical:10}}
+                placeholderTextColor={C.textFaint} placeholder="Item name"/>
+            </View>
+            {/* Editable cost */}
+            <View style={{gap:4}}>
+              <Text style={{color:C.textMuted,fontSize:11,fontWeight:'700'}}>CELLS NEEDED (= $ price)</Text>
+              <TextInput value={visionEditCost} onChangeText={setVisionEditCost}
+                keyboardType="number-pad"
+                style={{backgroundColor:C.surface,borderRadius:10,borderWidth:1.5,
+                  borderColor:C.border,color:C.text,fontSize:14,
+                  paddingHorizontal:12,paddingVertical:10}}
+                placeholderTextColor={C.textFaint} placeholder="e.g. 25"/>
+            </View>
+            <View style={{flexDirection:'row',gap:8}}>
+              <TouchableOpacity onPress={()=>setShowVisionCamera(true)}
+                style={{flex:1,backgroundColor:C.surface,borderRadius:10,
+                  padding:12,alignItems:'center',borderWidth:1.5,borderColor:C.border}}>
+                <Text style={{color:C.textMuted,fontWeight:'700',fontSize:13}}>📷 Retake</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={()=>{
+                  const finalName=visionEditName.trim()||pendingVisionGoal.name;
+                  const finalCost=Math.max(1,parseInt(visionEditCost,10)||pendingVisionGoal.cost);
+                  handleAddGoal({
+                    id:'vision_'+Date.now(),
+                    name:finalName,emoji:pendingVisionGoal.emoji,
+                    cost:finalCost,color:C.blue,
+                    isAmazon:true,priceUsd:finalCost,searchQ:finalName,
+                    fromVision:true,
+                  },savingGoals.length===0);
+                  setPendingVisionGoal(null);setVisionEditName('');setVisionEditCost('');
+                }}
+                style={{flex:2,backgroundColor:C.blue,borderRadius:10,
+                  padding:12,alignItems:'center'}}>
+                <Text style={{color:'#fff',fontWeight:'800',fontSize:14}}>Add to Goals 🎯</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ):(
+          <TouchableOpacity onPress={()=>setShowVisionCamera(true)}
+            disabled={visionLoading}
+            style={{backgroundColor:'#0a1929',borderRadius:12,borderWidth:2,
+              borderColor:C.blue+'66',padding:16,alignItems:'center',gap:6,marginTop:4}}>
+            {visionLoading?(
+              <ActivityIndicator color={C.blue} size="large"/>
+            ):(
+              <>
+                <Text style={{fontSize:28}}>📷</Text>
+                <Text style={{color:C.blue,fontWeight:'800',fontSize:14}}>
+                  Take a photo to add a goal
+                </Text>
+                <Text style={{color:C.textMuted,fontSize:12,textAlign:'center'}}>
+                  Point at anything — Cellie will identify it and set up your savings goal
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
       {/* Parent PIN gate — required before leaving app to Amazon */}
       <ParentPinGateModal
@@ -6187,6 +6275,49 @@ function UnifiedShopScreen({onBack,kidName}){
         onClose={()=>setShowCustomModal(false)}
         onAdd={(item)=>handleAddGoal(item,savingGoals.length===0)}
       />
+      {/* Cellie Vision camera modal */}
+      {showVisionCamera&&(
+        <Modal visible statusBarTranslucent animationType="slide">
+          <CameraOverlay
+            onCancel={()=>setShowVisionCamera(false)}
+            onCapture={async(base64)=>{
+              setShowVisionCamera(false);
+              setVisionLoading(true);
+              setPendingVisionGoal(null);
+              try{
+                const url=CELLIE_VISION_URL||CELLIE_ENDPOINT;
+                const resp=await fetch(url,{
+                  method:'POST',
+                  headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+                  body:JSON.stringify({
+                    mode:'vision',image:base64,
+                    question:'What is this item and is it worth saving for?',
+                    kidName:kidName||'friend',kidAge:8,sessionCells:20,
+                    goalSetup:true,
+                  }),
+                });
+                const data=await resp.json();
+                const answer=data.answer||'';
+                const nameMatch=answer.match(/\*\*([^*\n]+)\*\*/);
+                const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
+                const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
+                const name=nameMatch?nameMatch[1].trim()
+                  :answer.split('\n')[0].replace(/\$[\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
+                const price=priceMatch?parseFloat(priceMatch[1]):20;
+                const emoji=emojiMatch?emojiMatch[0]:'🎯';
+                const cost=Math.max(1,Math.round(price));
+                setPendingVisionGoal({name,emoji,cost,visionAnswer:answer});
+                setVisionEditName(name);
+                setVisionEditCost(String(cost));
+              }catch(e){
+                console.warn('Shop vision error:',e);
+              }finally{
+                setVisionLoading(false);
+              }
+            }}
+          />
+        </Modal>
+      )}
     </SafeAreaView>
   );
   }
