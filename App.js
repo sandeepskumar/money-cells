@@ -4107,6 +4107,8 @@ function KidSetupScreen({kidName,onDone}){
   const[showVision,setShowVision]=useState(false);
   const[visionLoading,setVisionLoading]=useState(false);
   const[showCatalog,setShowCatalog]=useState(false);
+  const[pendingGoal,setPendingGoal]=useState(null);  // parsed from vision, awaiting kid confirmation
+  const[visionText,setVisionText]=useState('');       // Cellie's conversational response to show kid
   const AMOUNTS=[1,5,10,20,50]; // max 50 = colony cap
   const ROPTS=[{id:'slow',...RATE_STORIES.slow,locked:false},{id:'medium',...RATE_STORIES.medium,locked:false},{id:'fast',...RATE_STORIES.fast,locked:true}];
 
@@ -4163,63 +4165,124 @@ function KidSetupScreen({kidName,onDone}){
               </View>
             </View>
 
-            {/* ── Selected goal preview (after scan or browse pick) ─── */}
-            {selectedGoal&&(
-              <View style={{backgroundColor:C.green900,borderRadius:14,
-                borderWidth:2,borderColor:C.green500,padding:16,gap:10}}>
-                <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
-                  <Text style={{fontSize:36}}>{selectedGoal.emoji}</Text>
+            {/* ── VERDICT VIEW: shown after photo is taken ──────────── */}
+            {pendingGoal&&(
+              <View style={{gap:14}}>
+                {/* Cellie's analysis bubble */}
+                <View style={{backgroundColor:C.green900,borderRadius:16,borderWidth:1.5,
+                  borderColor:C.green700,padding:16,
+                  flexDirection:'row',alignItems:'flex-start',gap:12}}>
+                  <Text style={{fontSize:30,lineHeight:36}}>🧬</Text>
                   <View style={{flex:1}}>
-                    <Text style={{color:C.green400,fontWeight:'800',fontSize:15}}>
-                      {selectedGoal.name}
-                    </Text>
-                    <Text style={{color:C.textMuted,fontSize:12,marginTop:2}}>
-                      Save {selectedGoal.cost} cells
-                      {selectedGoal.priceUsd?` · $${selectedGoal.priceUsd.toFixed(2)}`:''}
+                    <Text style={{color:C.green400,fontWeight:'800',fontSize:12,
+                      marginBottom:6,letterSpacing:0.5}}>CELLIE SAYS</Text>
+                    <Text style={{color:C.text,fontSize:14,lineHeight:22}}>
+                      {visionText||pendingGoal.visionAnswer}
                     </Text>
                   </View>
-                  <Text style={{color:C.green400,fontSize:24}}>✓</Text>
                 </View>
-                {selectedGoal.fromVision&&selectedGoal.visionAnswer?(
-                  <View style={{backgroundColor:C.bg,borderRadius:10,padding:12}}>
-                    <Text style={{color:C.textMuted,fontSize:12,lineHeight:18}}>
-                      {selectedGoal.visionAnswer}
+
+                {/* Goal card with cell cost + time estimate */}
+                <View style={{backgroundColor:C.card,borderRadius:14,borderWidth:1.5,
+                  borderColor:C.border,padding:16,flexDirection:'row',
+                  alignItems:'center',gap:14}}>
+                  <View style={{width:56,height:56,borderRadius:28,
+                    backgroundColor:C.blue+'22',alignItems:'center',justifyContent:'center',
+                    borderWidth:1.5,borderColor:C.blue+'44'}}>
+                    <Text style={{fontSize:30}}>{pendingGoal.emoji}</Text>
+                  </View>
+                  <View style={{flex:1}}>
+                    <Text style={{color:C.text,fontWeight:'800',fontSize:15}}>
+                      {pendingGoal.name}
+                    </Text>
+                    <Text style={{color:C.textMuted,fontSize:13,marginTop:3}}>
+                      ~{pendingGoal.cost} cells to save
+                      {pendingGoal.priceUsd?`  ·  $${pendingGoal.priceUsd.toFixed(0)} approx`:''}
                     </Text>
                   </View>
-                ):null}
-                <TouchableOpacity onPress={()=>setSelectedGoal(null)}
-                  style={{alignSelf:'flex-end',paddingVertical:4}}>
-                  <Text style={{color:C.textFaint,fontSize:12}}>Choose a different goal</Text>
+                </View>
+
+                {/* Confirm CTA */}
+                <TouchableOpacity
+                  onPress={()=>{setSelectedGoal(pendingGoal);setPendingGoal(null);setVisionText('');setStep(1);}}
+                  style={{backgroundColor:C.green500,borderRadius:14,padding:18,
+                    alignItems:'center',
+                    shadowColor:C.green500,shadowOffset:{width:0,height:3},
+                    shadowOpacity:0.35,shadowRadius:8}}>
+                  <Text style={{color:C.bg,fontWeight:'800',fontSize:17}}>
+                    Set this as my goal! 🎯
+                  </Text>
                 </TouchableOpacity>
+
+                {/* Retry / dismiss */}
+                <View style={{flexDirection:'row',gap:10}}>
+                  <TouchableOpacity
+                    onPress={()=>{setPendingGoal(null);setVisionText('');setShowVision(true);}}
+                    style={{flex:1,backgroundColor:C.surface,borderRadius:12,
+                      borderWidth:1.5,borderColor:C.border,padding:14,alignItems:'center'}}>
+                    <Text style={{color:C.text,fontWeight:'700',fontSize:14}}>📷 Try another photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={()=>{setPendingGoal(null);setVisionText('');setShowCatalog(true);}}
+                    style={{flex:1,backgroundColor:C.surface,borderRadius:12,
+                      borderWidth:1.5,borderColor:C.border,padding:14,alignItems:'center'}}>
+                    <Text style={{color:C.text,fontWeight:'700',fontSize:14}}>📋 Browse list</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
-            {/* ── Hero: Take a photo CTA (hidden once goal chosen) ──── */}
-            {!selectedGoal&&(
-              <TouchableOpacity onPress={()=>setShowVision(true)}
-                activeOpacity={0.85}
-                style={{backgroundColor:C.green500,borderRadius:18,padding:28,
-                  alignItems:'center',gap:10,
-                  shadowColor:C.green500,shadowOffset:{width:0,height:4},
-                  shadowOpacity:0.4,shadowRadius:12}}>
-                <Text style={{fontSize:56}}>📷</Text>
-                <Text style={{color:C.bg,fontWeight:'800',fontSize:20,textAlign:'center'}}>
-                  Take a photo
-                </Text>
-                <Text style={{color:C.bg+'bb',fontSize:13,textAlign:'center',lineHeight:19}}>
-                  Point at anything you want and{'\n'}Cellie will set up your goal!
-                </Text>
-              </TouchableOpacity>
-            )}
+            {/* ── INITIAL STATE: hero camera + browse ──────────────── */}
+            {!pendingGoal&&(
+              <View style={{gap:14}}>
+                {/* Selected goal preview (from catalog pick) */}
+                {selectedGoal&&(
+                  <View style={{backgroundColor:C.green900,borderRadius:14,
+                    borderWidth:2,borderColor:C.green500,padding:14,
+                    flexDirection:'row',alignItems:'center',gap:12}}>
+                    <Text style={{fontSize:32}}>{selectedGoal.emoji}</Text>
+                    <View style={{flex:1}}>
+                      <Text style={{color:C.green400,fontWeight:'800',fontSize:15}}>
+                        {selectedGoal.name}
+                      </Text>
+                      <Text style={{color:C.textMuted,fontSize:12,marginTop:2}}>
+                        {selectedGoal.cost} cells · {selectedGoal.priceUsd?`$${selectedGoal.priceUsd.toFixed(2)}`:''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={()=>setSelectedGoal(null)}>
+                      <Text style={{color:C.textFaint,fontSize:22}}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
-            {/* ── Secondary: Browse / custom ────────────────────────── */}
-            <TouchableOpacity onPress={()=>setShowCatalog(s=>!s)}
-              style={{flexDirection:'row',alignItems:'center',justifyContent:'center',
-                gap:6,paddingVertical:12}}>
-              <Text style={{color:C.textMuted,fontSize:13}}>
-                {showCatalog?'Hide goal list ▲':'Browse goal list instead ▼'}
-              </Text>
-            </TouchableOpacity>
+                {/* Hero take a photo CTA */}
+                {!selectedGoal&&(
+                  <TouchableOpacity onPress={()=>setShowVision(true)}
+                    activeOpacity={0.85}
+                    style={{backgroundColor:C.green500,borderRadius:18,padding:28,
+                      alignItems:'center',gap:10,
+                      shadowColor:C.green500,shadowOffset:{width:0,height:4},
+                      shadowOpacity:0.4,shadowRadius:12}}>
+                    <Text style={{fontSize:56}}>📷</Text>
+                    <Text style={{color:C.bg,fontWeight:'800',fontSize:20,textAlign:'center'}}>
+                      Take a photo
+                    </Text>
+                    <Text style={{color:C.bg+'bb',fontSize:13,textAlign:'center',lineHeight:19}}>
+                      Point at anything you want and{'\n'}Cellie will tell you if it's worth saving for!
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Browse toggle */}
+                <TouchableOpacity onPress={()=>setShowCatalog(s=>!s)}
+                  style={{flexDirection:'row',alignItems:'center',justifyContent:'center',
+                    gap:6,paddingVertical:10}}>
+                  <Text style={{color:C.textMuted,fontSize:13}}>
+                    {showCatalog?'Hide goal list ▲':'Browse goal list instead ▼'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {showCatalog&&(
               <View style={{gap:12}}>
@@ -4314,26 +4377,37 @@ function KidSetupScreen({kidName,onDone}){
                       });
                       const data=await resp.json();
                       const answer=data.answer||'';
-                      // Parse name (bold **text**), price ($n), emoji
-                      const nameMatch=answer.match(/\*\*([^*]+)\*\*/);
-                      const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
-                      const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
+                      // Line 1 = structured header: **Name** emoji · $price
+                      // Lines 2+ = Cellie's conversational analysis to show the kid
+                      const lines=answer.split('\n').filter(l=>l.trim());
+                      const headerLine=lines[0]||'';
+                      const conversation=lines.slice(1).join('\n\n').trim()||answer;
+                      // Parse structured fields from header line only
+                      const nameMatch=headerLine.match(/\*\*([^*]+)\*\*/);
+                      const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/); // any line
+                      const emojiMatch=headerLine.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
                       const name=nameMatch
-                        ?nameMatch[1]
-                        :answer.split('.')[0].replace(/[🎯📦🛒]/g,'').trim().slice(0,40)||'My Goal';
+                        ?nameMatch[1].trim()
+                        :headerLine.replace(/\$[\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
                       const price=priceMatch?parseFloat(priceMatch[1]):20;
                       const emoji=emojiMatch?emojiMatch[0]:'🎯';
                       const cost=Math.max(1,Math.round(price));
-                      const newGoal={
+                      setPendingGoal({
                         id:'vision_'+Date.now(),
                         name,emoji,cost,priceUsd:price,
                         isAmazon:true,searchQ:name,
                         color:C.blue,fromVision:true,visionAnswer:answer,
-                      };
-                      setSelectedGoal(newGoal);
-                      setStep(1);
+                      });
+                      setVisionText(conversation);
+                      // Note: setStep(1) only happens when kid taps "Set as my goal"
                     }catch(e){
                       console.warn('Vision goal setup failed:',e);
+                      setVisionText("I had trouble seeing that photo! 🧬 Try taking it in better light and getting closer to the item.");
+                      setPendingGoal({
+                        id:'vision_'+Date.now(),
+                        name:'My Goal',emoji:'🎯',cost:20,priceUsd:20,
+                        isAmazon:true,searchQ:'',color:C.blue,fromVision:true,visionAnswer:'',
+                      });
                     }
                     setVisionLoading(false);
                   }}
@@ -4429,7 +4503,7 @@ function KidSetupScreen({kidName,onDone}){
             ? <Btn label="Next →"
                 onPress={()=>setStep(s=>s+1)}
                 primary
-                style={{opacity:step===0&&!selectedGoal?0.4:1}}
+                style={{opacity:step===0&&(!selectedGoal||pendingGoal)?0.4:1}}
               />
             : <Btn label="🧬 Grow!"
                 onPress={()=>onDone(kidName+"'s Colony",principal,rate,
