@@ -2970,7 +2970,7 @@ function CoachingCard({userId, kids}){
 
       const resp=await fetch('https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
         body:JSON.stringify({
           mode:'parent',
           question,
@@ -3863,7 +3863,7 @@ async function analysePurchase(base64Image,kidName,kidAge,sessionCells,wishItem)
   try{
     const res=await fetch(url,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
       body:JSON.stringify({
         mode:'vision',
         image:base64Image,
@@ -3921,7 +3921,7 @@ function CellieModal({visible,onClose,kidName,kidAge,sessionCells,round,streak,r
       try{
         const res=await fetch(CELLIE_URL||CELLIE_ENDPOINT,{
           method:'POST',
-          headers:{'Content-Type':'application/json'},
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
           body:JSON.stringify({question,kidName,kidAge,
             sessionCells,round:round||1,streak:streak||0,
             resistMeter:resistMeter||0}),
@@ -4407,7 +4407,7 @@ function KidSetupScreen({kidName,onDone}){
                       const url=CELLIE_VISION_URL||'https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie';
                       const resp=await fetch(url,{
                         method:'POST',
-                        headers:{'Content-Type':'application/json'},
+                        headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
                         body:JSON.stringify({
                           mode:'vision',image:base64,
                           question:'What is this item and is it worth saving for?',
