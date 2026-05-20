@@ -4108,7 +4108,8 @@ function KidSetupScreen({kidName,onDone}){
   const[visionLoading,setVisionLoading]=useState(false);
   const[showCatalog,setShowCatalog]=useState(false);
   const[pendingGoal,setPendingGoal]=useState(null);  // parsed from vision, awaiting kid confirmation
-  const[visionText,setVisionText]=useState('');       // Cellie's conversational response to show kid
+  const[editName,setEditName]=useState('');           // editable name on verdict screen
+  const[editCost,setEditCost]=useState('');           // editable cost (cells) on verdict screen
   const AMOUNTS=[1,5,10,20,50]; // max 50 = colony cap
   const ROPTS=[{id:'slow',...RATE_STORIES.slow,locked:false},{id:'medium',...RATE_STORIES.medium,locked:false},{id:'fast',...RATE_STORIES.fast,locked:true}];
 
@@ -4168,7 +4169,7 @@ function KidSetupScreen({kidName,onDone}){
             {/* ── VERDICT VIEW: shown after photo is taken ──────────── */}
             {pendingGoal&&(
               <View style={{gap:14}}>
-                {/* Cellie's analysis bubble */}
+                {/* Cellie's full analysis */}
                 <View style={{backgroundColor:C.green900,borderRadius:16,borderWidth:1.5,
                   borderColor:C.green700,padding:16,
                   flexDirection:'row',alignItems:'flex-start',gap:12}}>
@@ -4177,34 +4178,73 @@ function KidSetupScreen({kidName,onDone}){
                     <Text style={{color:C.green400,fontWeight:'800',fontSize:12,
                       marginBottom:6,letterSpacing:0.5}}>CELLIE SAYS</Text>
                     <Text style={{color:C.text,fontSize:14,lineHeight:22}}>
-                      {visionText||pendingGoal.visionAnswer}
+                      {pendingGoal.visionAnswer}
                     </Text>
                   </View>
                 </View>
 
-                {/* Goal card with cell cost + time estimate */}
+                {/* Editable goal details */}
                 <View style={{backgroundColor:C.card,borderRadius:14,borderWidth:1.5,
-                  borderColor:C.border,padding:16,flexDirection:'row',
-                  alignItems:'center',gap:14}}>
-                  <View style={{width:56,height:56,borderRadius:28,
-                    backgroundColor:C.blue+'22',alignItems:'center',justifyContent:'center',
-                    borderWidth:1.5,borderColor:C.blue+'44'}}>
-                    <Text style={{fontSize:30}}>{pendingGoal.emoji}</Text>
+                  borderColor:C.border,padding:16,gap:12}}>
+                  <Text style={{color:C.textMuted,fontSize:11,fontWeight:'700',
+                    letterSpacing:0.5}}>GOAL DETAILS — tap to edit</Text>
+
+                  {/* Emoji + Name row */}
+                  <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+                    <Text style={{fontSize:28}}>{pendingGoal.emoji}</Text>
+                    <View style={{flex:1,backgroundColor:C.surface,borderRadius:10,
+                      borderWidth:1.5,borderColor:C.border,paddingHorizontal:12}}>
+                      <TextInput
+                        value={editName}
+                        onChangeText={setEditName}
+                        placeholder="Item name..."
+                        placeholderTextColor={C.textFaint}
+                        style={{color:C.text,fontSize:15,fontWeight:'700',paddingVertical:10}}
+                        maxLength={40}
+                      />
+                    </View>
                   </View>
-                  <View style={{flex:1}}>
-                    <Text style={{color:C.text,fontWeight:'800',fontSize:15}}>
-                      {pendingGoal.name}
-                    </Text>
-                    <Text style={{color:C.textMuted,fontSize:13,marginTop:3}}>
-                      ~{pendingGoal.cost} cells to save
-                      {pendingGoal.priceUsd?`  ·  $${pendingGoal.priceUsd.toFixed(0)} approx`:''}
-                    </Text>
+
+                  {/* Cost row */}
+                  <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+                    <View style={{flex:1,backgroundColor:C.surface,borderRadius:10,
+                      borderWidth:1.5,borderColor:C.border,paddingHorizontal:12,
+                      flexDirection:'row',alignItems:'center',gap:6}}>
+                      <Text style={{color:C.textMuted,fontSize:14}}>$</Text>
+                      <TextInput
+                        value={editCost}
+                        onChangeText={v=>setEditCost(v.replace(/[^0-9]/g,''))}
+                        placeholder="20"
+                        placeholderTextColor={C.textFaint}
+                        keyboardType="number-pad"
+                        style={{color:C.text,fontSize:15,fontWeight:'700',
+                          paddingVertical:10,flex:1}}
+                        maxLength={4}
+                      />
+                    </View>
+                    <View style={{flex:1,backgroundColor:C.green900+'88',borderRadius:10,
+                      padding:10,alignItems:'center'}}>
+                      <Text style={{color:C.green400,fontWeight:'800',fontSize:14}}>
+                        {editCost||'0'} cells
+                      </Text>
+                      <Text style={{color:C.textMuted,fontSize:11,marginTop:1}}>
+                        to save
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
                 {/* Confirm CTA */}
                 <TouchableOpacity
-                  onPress={()=>{setSelectedGoal(pendingGoal);setPendingGoal(null);setVisionText('');setStep(1);}}
+                  onPress={()=>{
+                    const finalCost=Math.max(1,parseInt(editCost,10)||pendingGoal.cost);
+                    const finalName=editName.trim()||pendingGoal.name;
+                    setSelectedGoal({...pendingGoal,name:finalName,cost:finalCost,
+                      priceUsd:finalCost,searchQ:finalName});
+                    setPendingGoal(null);
+                    setEditName('');setEditCost('');
+                    setStep(1);
+                  }}
                   style={{backgroundColor:C.green500,borderRadius:14,padding:18,
                     alignItems:'center',
                     shadowColor:C.green500,shadowOffset:{width:0,height:3},
@@ -4217,13 +4257,13 @@ function KidSetupScreen({kidName,onDone}){
                 {/* Retry / dismiss */}
                 <View style={{flexDirection:'row',gap:10}}>
                   <TouchableOpacity
-                    onPress={()=>{setPendingGoal(null);setVisionText('');setShowVision(true);}}
+                    onPress={()=>{setPendingGoal(null);setEditName('');setEditCost('');setShowVision(true);}}
                     style={{flex:1,backgroundColor:C.surface,borderRadius:12,
                       borderWidth:1.5,borderColor:C.border,padding:14,alignItems:'center'}}>
-                    <Text style={{color:C.text,fontWeight:'700',fontSize:14}}>📷 Try another photo</Text>
+                    <Text style={{color:C.text,fontWeight:'700',fontSize:14}}>📷 Retake</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={()=>{setPendingGoal(null);setVisionText('');setShowCatalog(true);}}
+                    onPress={()=>{setPendingGoal(null);setEditName('');setEditCost('');setShowCatalog(true);}}
                     style={{flex:1,backgroundColor:C.surface,borderRadius:12,
                       borderWidth:1.5,borderColor:C.border,padding:14,alignItems:'center'}}>
                     <Text style={{color:C.text,fontWeight:'700',fontSize:14}}>📋 Browse list</Text>
@@ -4377,37 +4417,35 @@ function KidSetupScreen({kidName,onDone}){
                       });
                       const data=await resp.json();
                       const answer=data.answer||'';
-                      // Line 1 = structured header: **Name** emoji · $price
-                      // Lines 2+ = Cellie's conversational analysis to show the kid
-                      const lines=answer.split('\n').filter(l=>l.trim());
-                      const headerLine=lines[0]||'';
-                      const conversation=lines.slice(1).join('\n\n').trim()||answer;
-                      // Parse structured fields from header line only
-                      const nameMatch=headerLine.match(/\*\*([^*]+)\*\*/);
-                      const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/); // any line
-                      const emojiMatch=headerLine.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
+                      // Parse header line: **Name** emoji · $price
+                      // Search entire answer for the structured fields
+                      const nameMatch=answer.match(/\*\*([^*\n]+)\*\*/);
+                      const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
+                      const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
                       const name=nameMatch
                         ?nameMatch[1].trim()
-                        :headerLine.replace(/\$[\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
+                        :answer.split('\n')[0].replace(/\$[\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
                       const price=priceMatch?parseFloat(priceMatch[1]):20;
                       const emoji=emojiMatch?emojiMatch[0]:'🎯';
                       const cost=Math.max(1,Math.round(price));
-                      setPendingGoal({
+                      const goal={
                         id:'vision_'+Date.now(),
                         name,emoji,cost,priceUsd:price,
                         isAmazon:true,searchQ:name,
-                        color:C.blue,fromVision:true,visionAnswer:answer,
-                      });
-                      setVisionText(conversation);
-                      // Note: setStep(1) only happens when kid taps "Set as my goal"
+                        color:C.blue,fromVision:true,
+                        visionAnswer:answer||"I can see you found something interesting! 🧬 Check the details below and edit if needed.",
+                      };
+                      setPendingGoal(goal);
+                      setEditName(name);
+                      setEditCost(String(cost));
                     }catch(e){
                       console.warn('Vision goal setup failed:',e);
-                      setVisionText("I had trouble seeing that photo! 🧬 Try taking it in better light and getting closer to the item.");
-                      setPendingGoal({
-                        id:'vision_'+Date.now(),
-                        name:'My Goal',emoji:'🎯',cost:20,priceUsd:20,
-                        isAmazon:true,searchQ:'',color:C.blue,fromVision:true,visionAnswer:'',
-                      });
+                      const fallback={id:'vision_'+Date.now(),name:'My Goal',emoji:'🎯',
+                        cost:20,priceUsd:20,isAmazon:true,searchQ:'',color:C.blue,fromVision:true,
+                        visionAnswer:"I had trouble reading that photo! 🧬 Try better lighting or get closer. You can also type the item name below."};
+                      setPendingGoal(fallback);
+                      setEditName('My Goal');
+                      setEditCost('20');
                     }
                     setVisionLoading(false);
                   }}
@@ -4503,7 +4541,7 @@ function KidSetupScreen({kidName,onDone}){
             ? <Btn label="Next →"
                 onPress={()=>setStep(s=>s+1)}
                 primary
-                style={{opacity:step===0&&(!selectedGoal||pendingGoal)?0.4:1}}
+                style={{opacity:(step===0&&!selectedGoal)||pendingGoal?0.4:1}}
               />
             : <Btn label="🧬 Grow!"
                 onPress={()=>onDone(kidName+"'s Colony",principal,rate,
