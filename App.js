@@ -3788,6 +3788,8 @@ function CameraOverlay({onCapture,onCancel}){
     );
   }
 
+  const ActiveCamera=CameraView;
+
   const takePicture=async()=>{
     if(!cameraRef.current||!ready)return;
     try{
