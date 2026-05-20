@@ -3794,7 +3794,8 @@ function CameraOverlay({onCapture,onCancel}){
     if(!cameraRef.current||!ready)return;
     try{
       const photo=await cameraRef.current.takePictureAsync({
-        base64:true,quality:0.7,
+        base64:true,
+        quality:0.3,           // low quality = small base64 (<500KB) — Claude identifies items fine at this res
         // skipProcessing omitted — it prevents base64 from being populated on iOS
       });
       if(!photo?.base64){
@@ -4416,6 +4417,10 @@ function KidSetupScreen({kidName,onDone}){
                         }),
                       });
                       const data=await resp.json();
+                      if(!resp.ok||data.error){
+                        console.warn('Cellie Vision error:',data.error||resp.status);
+                        // Still show the fallback answer if the API provided one
+                      }
                       const answer=data.answer||'';
                       // Parse header line: **Name** emoji · $price
                       // Search entire answer for the structured fields
