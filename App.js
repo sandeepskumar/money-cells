@@ -4106,6 +4106,7 @@ function KidSetupScreen({kidName,onDone}){
   const[showCustom,setShowCustom]=useState(false);
   const[showVision,setShowVision]=useState(false);
   const[visionLoading,setVisionLoading]=useState(false);
+  const[showCatalog,setShowCatalog]=useState(false);
   const AMOUNTS=[1,5,10,20,50]; // max 50 = colony cap
   const ROPTS=[{id:'slow',...RATE_STORIES.slow,locked:false},{id:'medium',...RATE_STORIES.medium,locked:false},{id:'fast',...RATE_STORIES.fast,locked:true}];
 
@@ -4143,117 +4144,155 @@ function KidSetupScreen({kidName,onDone}){
           </View>
         </View>
 
-        {/* ── STEP 0: Pick a savings goal ────────────────────────────── */}
+        {/* ── STEP 0: Cellie Vision — front and centre ────────────────── */}
         {step===0&&(
-          <View style={{gap:12}}>
-            <Text style={ss.h1}>What are you saving for? 🎯</Text>
+          <View style={{gap:16}}>
 
-            {/* Selected goal preview */}
+            {/* Cellie speech bubble */}
+            <View style={{backgroundColor:C.green900,borderRadius:16,borderWidth:1.5,
+              borderColor:C.green700,padding:16,
+              flexDirection:'row',alignItems:'flex-start',gap:12}}>
+              <Text style={{fontSize:34,lineHeight:40}}>🧬</Text>
+              <View style={{flex:1}}>
+                <Text style={{color:C.green400,fontWeight:'800',fontSize:13,marginBottom:4,
+                  letterSpacing:0.5}}>CELLIE SAYS</Text>
+                <Text style={{color:C.text,fontSize:14,lineHeight:22}}>
+                  Hey {kidName}! 👋 See something you want? Take a photo and I'll tell you
+                  if it's worth saving your cells for!
+                </Text>
+              </View>
+            </View>
+
+            {/* ── Selected goal preview (after scan or browse pick) ─── */}
             {selectedGoal&&(
-              <View style={{backgroundColor:C.green900,borderRadius:12,
-                borderWidth:2,borderColor:C.green500,padding:14,
-                flexDirection:'row',alignItems:'center',gap:12}}>
-                <Text style={{fontSize:32}}>{selectedGoal.emoji}</Text>
-                <View style={{flex:1}}>
-                  <Text style={{color:C.green400,fontWeight:'800',fontSize:15}}>
-                    {selectedGoal.name}
-                  </Text>
-                  <Text style={{color:C.textMuted,fontSize:12,marginTop:2}}>
-                    Save {selectedGoal.cost} cells
-                    {selectedGoal.priceUsd?` · $${selectedGoal.priceUsd.toFixed(2)}`:''}
-                  </Text>
+              <View style={{backgroundColor:C.green900,borderRadius:14,
+                borderWidth:2,borderColor:C.green500,padding:16,gap:10}}>
+                <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
+                  <Text style={{fontSize:36}}>{selectedGoal.emoji}</Text>
+                  <View style={{flex:1}}>
+                    <Text style={{color:C.green400,fontWeight:'800',fontSize:15}}>
+                      {selectedGoal.name}
+                    </Text>
+                    <Text style={{color:C.textMuted,fontSize:12,marginTop:2}}>
+                      Save {selectedGoal.cost} cells
+                      {selectedGoal.priceUsd?` · $${selectedGoal.priceUsd.toFixed(2)}`:''}
+                    </Text>
+                  </View>
+                  <Text style={{color:C.green400,fontSize:24}}>✓</Text>
                 </View>
-                <Text style={{color:C.green400,fontSize:22}}>✓</Text>
+                {selectedGoal.fromVision&&selectedGoal.visionAnswer?(
+                  <View style={{backgroundColor:C.bg,borderRadius:10,padding:12}}>
+                    <Text style={{color:C.textMuted,fontSize:12,lineHeight:18}}>
+                      {selectedGoal.visionAnswer}
+                    </Text>
+                  </View>
+                ):null}
+                <TouchableOpacity onPress={()=>setSelectedGoal(null)}
+                  style={{alignSelf:'flex-end',paddingVertical:4}}>
+                  <Text style={{color:C.textFaint,fontSize:12}}>Choose a different goal</Text>
+                </TouchableOpacity>
               </View>
             )}
 
-            {/* Search */}
-            <View style={{backgroundColor:C.card,borderRadius:10,borderWidth:1.5,
-              borderColor:C.border,flexDirection:'row',alignItems:'center',
-              paddingHorizontal:12,gap:8}}>
-              <Text style={{fontSize:16}}>🔍</Text>
-              <TextInput
-                value={goalQuery}
-                onChangeText={setGoalQuery}
-                placeholder="Search toys, games, sets..."
-                placeholderTextColor={C.textFaint}
-                style={{flex:1,color:C.text,fontSize:14,paddingVertical:10}}
-                autoCapitalize="none"
-              />
-              {!!goalQuery&&(
-                <TouchableOpacity onPress={()=>setGoalQuery('')}>
-                  <Text style={{color:C.textMuted,fontSize:18}}>×</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            {/* ── Hero: Take a photo CTA (hidden once goal chosen) ──── */}
+            {!selectedGoal&&(
+              <TouchableOpacity onPress={()=>setShowVision(true)}
+                activeOpacity={0.85}
+                style={{backgroundColor:C.green500,borderRadius:18,padding:28,
+                  alignItems:'center',gap:10,
+                  shadowColor:C.green500,shadowOffset:{width:0,height:4},
+                  shadowOpacity:0.4,shadowRadius:12}}>
+                <Text style={{fontSize:56}}>📷</Text>
+                <Text style={{color:C.bg,fontWeight:'800',fontSize:20,textAlign:'center'}}>
+                  Take a photo
+                </Text>
+                <Text style={{color:C.bg+'bb',fontSize:13,textAlign:'center',lineHeight:19}}>
+                  Point at anything you want and{'\n'}Cellie will set up your goal!
+                </Text>
+              </TouchableOpacity>
+            )}
 
-            {/* Catalog */}
-            {filteredCatalog.map(item=>{
-              const isSelected=selectedGoal?.id===item.id;
-              return(
-                <TouchableOpacity key={item.id} onPress={()=>setSelectedGoal(item)}
+            {/* ── Secondary: Browse / custom ────────────────────────── */}
+            <TouchableOpacity onPress={()=>setShowCatalog(s=>!s)}
+              style={{flexDirection:'row',alignItems:'center',justifyContent:'center',
+                gap:6,paddingVertical:12}}>
+              <Text style={{color:C.textMuted,fontSize:13}}>
+                {showCatalog?'Hide goal list ▲':'Browse goal list instead ▼'}
+              </Text>
+            </TouchableOpacity>
+
+            {showCatalog&&(
+              <View style={{gap:12}}>
+                {/* Search */}
+                <View style={{backgroundColor:C.card,borderRadius:10,borderWidth:1.5,
+                  borderColor:C.border,flexDirection:'row',alignItems:'center',
+                  paddingHorizontal:12,gap:8}}>
+                  <Text style={{fontSize:16}}>🔍</Text>
+                  <TextInput
+                    value={goalQuery}
+                    onChangeText={setGoalQuery}
+                    placeholder="Search toys, games, sets..."
+                    placeholderTextColor={C.textFaint}
+                    style={{flex:1,color:C.text,fontSize:14,paddingVertical:10}}
+                    autoCapitalize="none"
+                  />
+                  {!!goalQuery&&(
+                    <TouchableOpacity onPress={()=>setGoalQuery('')}>
+                      <Text style={{color:C.textMuted,fontSize:18}}>×</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Catalog */}
+                {filteredCatalog.map(item=>{
+                  const isSelected=selectedGoal?.id===item.id;
+                  return(
+                    <TouchableOpacity key={item.id}
+                      onPress={()=>{setSelectedGoal(item);setShowCatalog(false);}}
+                      style={{flexDirection:'row',alignItems:'center',gap:12,
+                        backgroundColor:isSelected?C.green900:C.card,
+                        borderRadius:12,borderWidth:1.5,
+                        borderColor:isSelected?C.green400:C.border,padding:12}}>
+                      <View style={{width:44,height:44,borderRadius:22,
+                        backgroundColor:item.color+'22',alignItems:'center',justifyContent:'center',
+                        borderWidth:1,borderColor:item.color+'44'}}>
+                        <Text style={{fontSize:24}}>{item.emoji}</Text>
+                      </View>
+                      <View style={{flex:1}}>
+                        <Text style={{color:C.text,fontWeight:'700',fontSize:14}}>
+                          {item.name}
+                        </Text>
+                        <Text style={{color:C.textMuted,fontSize:12,marginTop:1}}>
+                          {item.cost} cells
+                          {item.priceUsd?` · $${item.priceUsd.toFixed(2)}`:''}
+                          {item.isAmazon?'  🛒':''}
+                        </Text>
+                      </View>
+                      {isSelected&&<Text style={{color:C.green400,fontSize:22}}>⭐</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* Add custom item */}
+                <TouchableOpacity onPress={()=>setShowCustom(true)}
                   style={{flexDirection:'row',alignItems:'center',gap:12,
-                    backgroundColor:isSelected?C.green900:C.card,
-                    borderRadius:12,borderWidth:1.5,
-                    borderColor:isSelected?C.green400:C.border,padding:12}}>
+                    backgroundColor:C.surface,borderRadius:12,
+                    borderWidth:1.5,borderColor:C.border,borderStyle:'dashed',padding:14}}>
                   <View style={{width:44,height:44,borderRadius:22,
-                    backgroundColor:item.color+'22',alignItems:'center',justifyContent:'center',
-                    borderWidth:1,borderColor:item.color+'44'}}>
-                    <Text style={{fontSize:24}}>{item.emoji}</Text>
+                    backgroundColor:C.green900,alignItems:'center',justifyContent:'center'}}>
+                    <Text style={{fontSize:22}}>➕</Text>
                   </View>
                   <View style={{flex:1}}>
-                    <Text style={{color:isSelected?C.text:C.text,fontWeight:'700',fontSize:14}}>
-                      {item.name}
+                    <Text style={{color:C.green400,fontWeight:'700',fontSize:14}}>
+                      Add your own item
                     </Text>
-                    <Text style={{color:C.textMuted,fontSize:12,marginTop:1}}>
-                      {item.cost} cells
-                      {item.priceUsd?` · $${item.priceUsd.toFixed(2)}`:''}
-                      {item.isAmazon?'  🛒':''}
-                    </Text>
+                    <Text style={{color:C.textMuted,fontSize:12}}>Any toy from Amazon</Text>
                   </View>
-                  {isSelected&&<Text style={{color:C.green400,fontSize:22}}>⭐</Text>}
                 </TouchableOpacity>
-              );
-            })}
+              </View>
+            )}
 
-            {/* Add any item */}
-            <TouchableOpacity onPress={()=>setShowCustom(true)}
-              style={{flexDirection:'row',alignItems:'center',gap:12,
-                backgroundColor:C.surface,borderRadius:12,
-                borderWidth:1.5,borderColor:C.border,borderStyle:'dashed',padding:14}}>
-              <View style={{width:44,height:44,borderRadius:22,
-                backgroundColor:C.green900,alignItems:'center',justifyContent:'center'}}>
-                <Text style={{fontSize:22}}>➕</Text>
-              </View>
-              <View style={{flex:1}}>
-                <Text style={{color:C.green400,fontWeight:'700',fontSize:14}}>
-                  Add your own item
-                </Text>
-                <Text style={{color:C.textMuted,fontSize:12}}>Any toy from Amazon</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Scan with Cellie Vision */}
-            <TouchableOpacity onPress={()=>setShowVision(true)}
-              style={{flexDirection:'row',alignItems:'center',gap:12,
-                backgroundColor:C.blue+'15',borderRadius:12,
-                borderWidth:1.5,borderColor:C.blue+'44',padding:14}}>
-              <View style={{width:44,height:44,borderRadius:22,
-                backgroundColor:C.blue+'22',alignItems:'center',justifyContent:'center'}}>
-                <Text style={{fontSize:22}}>📷</Text>
-              </View>
-              <View style={{flex:1}}>
-                <Text style={{color:C.blue,fontWeight:'800',fontSize:14}}>
-                  Scan with Cellie Vision
-                </Text>
-                <Text style={{color:C.textMuted,fontSize:12}}>
-                  Point at any toy — Cellie sets up the goal!
-                </Text>
-              </View>
-              <Text style={{fontSize:16}}>✨</Text>
-            </TouchableOpacity>
-
-            {/* Cellie Vision Camera for goal setup */}
+            {/* Cellie Vision camera modal */}
             {showVision&&(
               <Modal visible statusBarTranslucent animationType="slide">
                 <CameraOverlay
@@ -4262,35 +4301,34 @@ function KidSetupScreen({kidName,onDone}){
                     setShowVision(false);
                     setVisionLoading(true);
                     try{
-                      const resp=await fetch(
-                        'https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie',
-                        {method:'POST',headers:{'Content-Type':'application/json'},
-                          body:JSON.stringify({
-                            mode:'vision',image:base64,
-                            kidName:kidName||'friend',kidAge:8,sessionCells:20,
-                            goalSetup:true, // hint to return structured data
-                          })}
-                      );
+                      const url=CELLIE_VISION_URL||'https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie';
+                      const resp=await fetch(url,{
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({
+                          mode:'vision',image:base64,
+                          question:'What is this item and is it worth saving for?',
+                          kidName:kidName||'friend',kidAge:8,sessionCells:20,
+                          goalSetup:true,
+                        }),
+                      });
                       const data=await resp.json();
                       const answer=data.answer||'';
-                      // Parse Cellie's response for name, emoji, price
+                      // Parse name (bold **text**), price ($n), emoji
                       const nameMatch=answer.match(/\*\*([^*]+)\*\*/);
                       const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
                       const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
-                      const name=nameMatch?nameMatch[1]:answer.split('.')[0].replace(/[🎯📦🛒]/g,'').trim().slice(0,40)||'My Goal';
+                      const name=nameMatch
+                        ?nameMatch[1]
+                        :answer.split('.')[0].replace(/[🎯📦🛒]/g,'').trim().slice(0,40)||'My Goal';
                       const price=priceMatch?parseFloat(priceMatch[1]):20;
                       const emoji=emojiMatch?emojiMatch[0]:'🎯';
                       const cost=Math.max(1,Math.round(price));
-                      // Auto-populate goal
                       const newGoal={
                         id:'vision_'+Date.now(),
-                        name,emoji,
-                        cost,priceUsd:price,
-                        isAmazon:true,
-                        searchQ:name,
-                        color:C.blue,
-                        fromVision:true,
-                        visionAnswer:answer,
+                        name,emoji,cost,priceUsd:price,
+                        isAmazon:true,searchQ:name,
+                        color:C.blue,fromVision:true,visionAnswer:answer,
                       };
                       setSelectedGoal(newGoal);
                       setStep(1);
@@ -4305,11 +4343,15 @@ function KidSetupScreen({kidName,onDone}){
 
             {/* Vision loading overlay */}
             {visionLoading&&(
-              <View style={{position:'absolute',inset:0,backgroundColor:'rgba(0,0,0,0.7)',
+              <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,
+                backgroundColor:'rgba(0,0,0,0.75)',
                 alignItems:'center',justifyContent:'center',zIndex:99,borderRadius:12}}>
-                <Text style={{fontSize:48,marginBottom:12}}>🧬</Text>
-                <Text style={{color:C.greenL,fontWeight:'800',fontSize:16}}>
+                <Text style={{fontSize:52,marginBottom:12}}>🧬</Text>
+                <Text style={{color:C.green400,fontWeight:'800',fontSize:17}}>
                   Cellie is checking it out...
+                </Text>
+                <Text style={{color:C.textMuted,fontSize:13,marginTop:6}}>
+                  This takes a few seconds ✨
                 </Text>
               </View>
             )}

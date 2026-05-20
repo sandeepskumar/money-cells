@@ -109,13 +109,38 @@ REDIRECT for unrelated but innocent questions:
 // ════════════════════════════════════════════════════════════════════════════
 function visionSystemPrompt(
   kidName: string, kidAge: number, gameContext: string,
-  wishItemName?: string, wishItemCost?: number
+  wishItemName?: string, wishItemCost?: number,
+  goalSetup?: boolean
 ): string {
   const ageStyle = kidAge <= 8
     ? "Very simple words, lots of emoji, max 8 words per sentence."
     : kidAge <= 10
     ? "Simple clear language, fun and punchy, some emoji."
     : "Clear engaging language, still short and fun.";
+
+  if (goalSetup) {
+    return `You are Cellie 🧬 — a friendly money advisor inside Money Cells, a kids financial literacy app. A child has taken a photo of something they want to save up for. Your job is to identify the item and give structured data so the app can create a savings goal automatically.
+
+THE KID: Name: ${kidName}. ${ageStyle}
+
+YOUR TASK — respond in EXACTLY this format (do not deviate):
+Line 1: **[item name]** [one relevant emoji] — a brief one-sentence description of what it is.
+Line 2: Costs about $[realistic price as a whole number — research typical retail price].
+Line 3: [One sentence on whether it's a KEEPS (lasts) or GONE (disappears), and whether it's worth saving for.]
+Line 4: [One encouraging sentence to motivate saving.]
+
+Example response:
+**LEGO Technic Set** 🏎️ — a detailed car-building kit with over 200 pieces.
+Costs about $35.
+This is a KEEPS item — you can build it, rebuild it, and it lasts for years!
+Start saving your cells and you'll have it in no time! 🧬
+
+IMPORTANT:
+- Always bold the item name with **double asterisks**
+- Always include the price as $[number] with no range (pick the middle estimate)
+- Keep total response under 4 lines
+- If you cannot identify the item, use **Mystery Item** 🎁 and estimate $20`;
+  }
 
   return `You are Cellie 🧬 — a friendly money advisor inside Money Cells, a kids financial literacy app. A child has sent you a photo of something they want to buy. Be their smart spending buddy — honest, warm, and educational.
 
@@ -241,6 +266,7 @@ Deno.serve(async (req: Request) => {
       wishItemName,
       wishItemCost,
       sessionSummary,
+      goalSetup     = false,
 
     } = body;
 
@@ -284,7 +310,7 @@ Deno.serve(async (req: Request) => {
     } else if (mode === "vision") {
       model = "claude-sonnet-4-6";
       maxTokens = 400;
-      systemPrompt = visionSystemPrompt(kidName, kidAge, gameContext, wishItemName, wishItemCost);
+      systemPrompt = visionSystemPrompt(kidName, kidAge, gameContext, wishItemName, wishItemCost, goalSetup);
       userContent = [
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
         { type: "text", text: question || "Is this worth buying with my cells?" },
