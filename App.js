@@ -5104,6 +5104,50 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
         </View>
       </View>
 
+      {/* ── GOAL PROGRESS METER — always visible when a goal is set ──── */}
+      {wishItem&&(
+        <View style={{marginHorizontal:16,marginBottom:6,marginTop:2}}>
+          <View style={{
+            backgroundColor:wishReady?C.green900:wishItem.color+'15',
+            borderRadius:12,borderWidth:1.5,
+            borderColor:wishReady?C.green500+'88':wishItem.color+'44',
+            paddingHorizontal:12,paddingVertical:9,gap:6,
+          }}>
+            {/* Row: emoji · name · cells count */}
+            <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+              <Text style={{fontSize:22}}>{wishItem.emoji}</Text>
+              <Text style={{color:C.text,fontWeight:'700',fontSize:12,flex:1}}
+                numberOfLines={1}>{wishItem.name}</Text>
+              {wishReady?(
+                <Text style={{color:C.green400,fontWeight:'800',fontSize:12}}>
+                  ✅ Goal reached!
+                </Text>
+              ):(
+                <View style={{alignItems:'flex-end'}}>
+                  <Text style={{color:wishItem.color,fontWeight:'800',fontSize:13}}>
+                    {totalCellsEarned}
+                    <Text style={{color:C.textMuted,fontWeight:'400',fontSize:11}}>
+                      {' '}/ {wishItem.cost} 🧬
+                    </Text>
+                  </Text>
+                  <Text style={{color:C.textMuted,fontSize:10}}>
+                    {wishItem.cost - totalCellsEarned} cells to go
+                  </Text>
+                </View>
+              )}
+            </View>
+            {/* Progress bar */}
+            <View style={{height:8,backgroundColor:C.surface,borderRadius:4,overflow:'hidden'}}>
+              <View style={{
+                height:8,borderRadius:4,
+                backgroundColor:wishReady?C.green500:wishItem.color,
+                width:`${Math.round(wishProg*100)}%`,
+              }}/>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* ── ZONE 3: Context slot — ONE thing at a time ───────────────── */}
       <View style={{marginHorizontal:16,marginBottom:8,minHeight:52}}>
         {showFlashDeal&&(
