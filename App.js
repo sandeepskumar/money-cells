@@ -39,6 +39,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    flowType: 'implicit', // needed so reset links carry tokens in the URL hash (not PKCE code)
   },
 });
 
@@ -6808,18 +6809,24 @@ function RootApp(){
 
   // Handle deep link from password reset email
   useEffect(()=>{
-    const handleDeepLink=({url})=>{
-      if(url&&url.includes('reset-password')){
-        // Extract tokens from URL and let Supabase handle the session
-        // The onAuthStateChange listener will pick up the new session
-        setScreen(APP.login);
+    const processResetUrl=async(url)=>{
+      if(!url||!url.includes('reset-password'))return;
+      // Supabase implicit flow puts tokens in the hash fragment:
+      // moneycells://reset-password#access_token=XX&refresh_token=YY&type=recovery
+      const hash=url.split('#')[1]||'';
+      const params=new URLSearchParams(hash);
+      const accessToken=params.get('access_token');
+      const refreshToken=params.get('refresh_token');
+      if(accessToken&&refreshToken){
+        // Hand the tokens to Supabase — onAuthStateChange fires PASSWORD_RECOVERY
+        await supabase.auth.setSession({access_token:accessToken,refresh_token:refreshToken});
       }
+      setScreen(APP.login);
     };
+    const handleDeepLink=({url})=>processResetUrl(url);
     const sub=Linking.addEventListener('url',handleDeepLink);
-    // Check if app was opened via deep link
-    Linking.getInitialURL().then(url=>{
-      if(url&&url.includes('reset-password'))setScreen(APP.login);
-    }).catch(()=>{});
+    // Handle case where app was cold-launched from the reset link
+    Linking.getInitialURL().then(url=>processResetUrl(url)).catch(()=>{});
     return()=>sub.remove();
   },[]);// eslint-disable-line react-hooks/exhaustive-deps
 
