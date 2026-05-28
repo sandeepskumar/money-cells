@@ -774,17 +774,16 @@ async function deleteAccount(userId){
   }
 }
 
-// Send a 6-digit OTP to the email for password reset — no deep link needed
+// Send a password reset email — Supabase emails a token the user types back in
+// No redirectTo = no broken localhost link; the token is in the email body
 async function supabaseSendResetOtp(email){
-  const{error}=await supabase.auth.signInWithOtp({
-    email,
-    options:{shouldCreateUser:false}, // don't create account if not found
-  });
+  const{error}=await supabase.auth.resetPasswordForEmail(email);
   if(error)throw error;
 }
-// Verify the 6-digit code and sign the user in with recovery session
+// Verify the token from the reset email and establish a recovery session
+// onAuthStateChange fires PASSWORD_RECOVERY → SHOW_RESET_PASSWORD
 async function supabaseVerifyResetOtp(email,token){
-  const{error}=await supabase.auth.verifyOtp({email,token,type:'email'});
+  const{error}=await supabase.auth.verifyOtp({email,token:token.trim(),type:'recovery'});
   if(error)throw error;
 }
 
@@ -2842,43 +2841,47 @@ function ParentLoginScreen(){
                     Check your email
                   </Text>
                   <Text style={{color:C.textMuted,fontSize:12,textAlign:'center',lineHeight:17}}>
-                    We sent a 6-digit code to {email.trim()}. Enter it below — check spam if you don't see it.
+                    We sent a reset code to {email.trim()}. Find the code in the email and type it below.
+                  </Text>
+                  <Text style={{color:C.textMuted,fontSize:11,textAlign:'center',lineHeight:16,marginTop:2}}>
+                    💡 Look for "Your confirmation code" in the email. Check spam if you don't see it.
                   </Text>
                 </View>
                 <TextInput
-                  value={resetOtp} onChangeText={v=>setResetOtp(v.replace(/\D/g,'').slice(0,6))}
-                  placeholder="6-digit code"
+                  value={resetOtp} onChangeText={v=>setResetOtp(v.trim())}
+                  placeholder="Paste code here"
                   placeholderTextColor={C.textFaint}
-                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
                   textAlign="center"
                   style={{backgroundColor:C.bg,borderRadius:10,borderWidth:1.5,
                     borderColor:C.border,padding:14,color:C.text,
-                    fontSize:26,fontWeight:'800',letterSpacing:8}}
+                    fontSize:20,fontWeight:'800',letterSpacing:4}}
                 />
                 <TouchableOpacity
                   onPress={async()=>{
-                    if(resetOtp.length<6){setAuthError('Enter the full 6-digit code.');return;}
+                    if(!resetOtp.trim()){setAuthError('Paste the code from your email.');return;}
                     setLoading(true);setAuthError('');
                     try{
                       await supabaseVerifyResetOtp(email.trim().toLowerCase(),resetOtp);
                       dispatch({type:'SHOW_RESET_PASSWORD'});
                       setShowReset(false);setResetStep('send');setResetOtp('');
                     }catch(e){
-                      setAuthError(e.message||'Invalid code. Check your email and try again.');
+                      setAuthError(e.message||'Invalid code. Copy it exactly from the email and try again.');
                     }
                     setLoading(false);
                   }}
-                  disabled={loading||resetOtp.length<6}
-                  style={{backgroundColor:loading||resetOtp.length<6?C.surface:C.green500,
+                  disabled={loading||!resetOtp.trim()}
+                  style={{backgroundColor:loading||!resetOtp.trim()?C.surface:C.green500,
                     borderRadius:10,padding:12,alignItems:'center',
-                    opacity:loading||resetOtp.length<6?0.5:1}}>
-                  <Text style={{color:loading||resetOtp.length<6?C.textMuted:C.bg,fontWeight:'800',fontSize:14}}>
-                    {loading?'Verifying...':'Verify code'}
+                    opacity:loading||!resetOtp.trim()?0.5:1}}>
+                  <Text style={{color:loading||!resetOtp.trim()?C.textMuted:C.bg,fontWeight:'800',fontSize:14}}>
+                    {loading?'Verifying...':'Verify & reset password'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={()=>{setResetStep('send');setResetOtp('');setAuthError('');}}
                   style={{alignItems:'center',paddingVertical:2}}>
-                  <Text style={{color:C.textMuted,fontSize:12}}>← Resend code</Text>
+                  <Text style={{color:C.textMuted,fontSize:12}}>← Resend email</Text>
                 </TouchableOpacity>
               </>
             )}
