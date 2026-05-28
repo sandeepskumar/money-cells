@@ -650,6 +650,9 @@ function appReducer(state,action){
       return{...state,parent:{...state.parent,pin:action.pin}};
     case 'SHOW_RESET_PASSWORD':return{...state,pendingPasswordReset:true};
     case 'CLEAR_RESET_PASSWORD':return{...state,pendingPasswordReset:false};
+    // Sign out of Supabase session without wiping parent/kids data
+    // Used after password reset so user signs in fresh with new password
+    case 'RESET_AUTH_STATE':return{...state,loggedIn:false,supabaseUser:null,pendingPasswordReset:false};
     case 'UPDATE_KID_GAME':{
       if(!state.parent)return state;
       const updatedKids=(state.parent.kids||[]).map(k=>
@@ -2895,6 +2898,13 @@ function ParentLoginScreen(){
 function ParentHomeScreen({onStartSession,onDashboard}){
   const{state,dispatch}=useApp();const[addingKid,setAddingKid]=useState(false);
   const[newName,setNewName]=useState('');const[newAvatar,setNewAvatar]=useState(KID_AVATARS[0]);
+  const[showChangePinModal,setShowChangePinModal]=useState(false);
+  const[cpCurrent,setCpCurrent]=useState('');
+  const[cpNew,setCpNew]=useState('');
+  const[cpConfirm,setCpConfirm]=useState('');
+  const[cpError,setCpError]=useState('');
+  const[cpSuccess,setCpSuccess]=useState(false);
+  const resetChangePinModal=()=>{setShowChangePinModal(false);setCpCurrent('');setCpNew('');setCpConfirm('');setCpError('');setCpSuccess(false);};
   const kids=state.parent?.kids||[];
   if(addingKid){
     return(
@@ -2936,6 +2946,10 @@ function ParentHomeScreen({onStartSession,onDashboard}){
         <TouchableOpacity onPress={()=>setAddingKid(true)} style={{backgroundColor:C.surface,borderRadius:14,borderWidth:1.5,borderColor:C.border,borderStyle:'dashed',padding:16,alignItems:'center',flexDirection:'row',justifyContent:'center',gap:8}}>
           <Text style={{color:C.textMuted,fontSize:24}}>+</Text><Text style={{color:C.textMuted,fontSize:14,fontWeight:'600'}}>Add another child</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={()=>setShowChangePinModal(true)}
+          style={{alignItems:'center',paddingVertical:8}}>
+          <Text style={{color:C.textMuted,fontSize:12}}>🔒 Change PIN</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={()=>dispatch({type:'LOGOUT'})} style={{alignItems:'center',paddingVertical:8}}><Text style={{color:C.textFaint,fontSize:12}}>Sign out</Text></TouchableOpacity>
         <TouchableOpacity
           onPress={()=>Alert.alert(
@@ -2960,6 +2974,59 @@ function ParentHomeScreen({onStartSession,onDashboard}){
           <Text style={{color:C.red+'88',fontSize:11}}>Delete account & all data</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── Change PIN modal ─────────────────────────────────────────── */}
+      <Modal visible={showChangePinModal} transparent animationType="fade" statusBarTranslucent>
+        <View style={{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'center',padding:24}}>
+          <View style={{backgroundColor:C.card,borderRadius:16,borderWidth:1.5,
+            borderColor:C.border,padding:24,gap:14}}>
+            <View style={{alignItems:'center',gap:4}}>
+              <Text style={{fontSize:36}}>{cpSuccess?'✅':'🔒'}</Text>
+              <Text style={{color:C.text,fontWeight:'800',fontSize:18}}>
+                {cpSuccess?'PIN updated!':'Change your PIN'}
+              </Text>
+            </View>
+            {cpSuccess?(
+              <Text style={{color:C.textMuted,fontSize:13,textAlign:'center'}}>
+                Use your new PIN next time you start a session.
+              </Text>
+            ):(
+              <>
+                <View style={{gap:6}}>
+                  <Text style={{color:C.textMuted,fontSize:12}}>Current PIN</Text>
+                  <PinInput value={cpCurrent} onChange={v=>{setCpCurrent(v);setCpError('');}} label=""/>
+                </View>
+                <View style={{gap:6}}>
+                  <Text style={{color:C.textMuted,fontSize:12}}>New PIN</Text>
+                  <PinInput value={cpNew} onChange={v=>{setCpNew(v);setCpError('');}} label=""/>
+                </View>
+                <View style={{gap:6}}>
+                  <Text style={{color:C.textMuted,fontSize:12}}>Confirm new PIN</Text>
+                  <PinInput value={cpConfirm} onChange={v=>{setCpConfirm(v);setCpError('');}} label=""/>
+                </View>
+                {!!cpError&&<Text style={{color:C.red,fontSize:12,textAlign:'center'}}>{cpError}</Text>}
+                <TouchableOpacity
+                  onPress={()=>{
+                    if(cpCurrent!==state.parent?.pin){setCpError('Current PIN is wrong.');setCpCurrent('');return;}
+                    if(cpNew.length<4){setCpError('New PIN must be 4 digits.');return;}
+                    if(cpNew!==cpConfirm){setCpError("PINs don't match.");setCpConfirm('');return;}
+                    dispatch({type:'SET_PIN',pin:cpNew});
+                    setCpSuccess(true);
+                    setTimeout(resetChangePinModal,1800);
+                  }}
+                  style={{backgroundColor:C.green500,borderRadius:10,padding:13,alignItems:'center'}}>
+                  <Text style={{color:C.bg,fontWeight:'800',fontSize:14}}>Update PIN</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {!cpSuccess&&(
+              <TouchableOpacity onPress={resetChangePinModal} style={{alignItems:'center',paddingVertical:4}}>
+                <Text style={{color:C.textMuted,fontSize:13}}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -6803,9 +6870,11 @@ function SetNewPasswordScreen({onDone}){
     try{
       const{error:err}=await supabase.auth.updateUser({password});
       if(err)throw err;
+      // Sign out the recovery session so the user signs in fresh with the new password
+      await supabase.auth.signOut();
       setSuccess(true);
       setTimeout(()=>{
-        dispatch({type:'CLEAR_RESET_PASSWORD'});
+        dispatch({type:'RESET_AUTH_STATE'}); // clears loggedIn + supabaseUser, keeps parent data
         onDone();
       },2000);
     }catch(e){
@@ -6827,7 +6896,7 @@ function SetNewPasswordScreen({onDone}){
           </Text>
           <Text style={{color:C.textMuted,fontSize:13,textAlign:'center'}}>
             {success
-              ?"You're all set — taking you back to sign in..."
+              ?'Sign in with your new password to continue.'
               :'Choose a new password for your Money Cells account'}
           </Text>
         </View>
