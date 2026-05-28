@@ -39,7 +39,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
-    flowType: 'implicit', // needed so reset links carry tokens in the URL hash (not PKCE code)
   },
 });
 
@@ -775,11 +774,17 @@ async function deleteAccount(userId){
   }
 }
 
-// Send password reset email
-async function supabaseResetPassword(email){
-  const{error}=await supabase.auth.resetPasswordForEmail(email,{
-    redirectTo:'moneycells://reset-password',
+// Send a 6-digit OTP to the email for password reset — no deep link needed
+async function supabaseSendResetOtp(email){
+  const{error}=await supabase.auth.signInWithOtp({
+    email,
+    options:{shouldCreateUser:false}, // don't create account if not found
   });
+  if(error)throw error;
+}
+// Verify the 6-digit code and sign the user in with recovery session
+async function supabaseVerifyResetOtp(email,token){
+  const{error}=await supabase.auth.verifyOtp({email,token,type:'email'});
   if(error)throw error;
 }
 
@@ -2704,8 +2709,9 @@ function ParentLoginScreen(){
   const[isSignUp,setIsSignUp]=useState(false);
   const[loading,setLoading]=useState(false);
   const[authError,setAuthError]=useState('');
-  const[resetSent,setResetSent]=useState(false);
   const[showReset,setShowReset]=useState(false);
+  const[resetStep,setResetStep]=useState('send'); // 'send' | 'verify'
+  const[resetOtp,setResetOtp]=useState('');
   return(
     <SafeAreaView style={{flex:1,backgroundColor:C.bg}}>
       <ScrollView contentContainerStyle={{flexGrow:1,padding:24,justifyContent:'center',gap:22}}>
@@ -2790,41 +2796,29 @@ function ParentLoginScreen(){
           </TouchableOpacity>
         )}
 
-        {/* Password reset form */}
+        {/* Password reset form — OTP code flow (no deep links) */}
         {showReset&&(
           <View style={{backgroundColor:C.card,borderRadius:12,borderWidth:1,
             borderColor:C.border,padding:16,gap:12}}>
-            {resetSent?(
-              <View style={{gap:8,alignItems:'center'}}>
-                <Text style={{fontSize:32}}>📧</Text>
-                <Text style={{color:C.green400,fontWeight:'800',fontSize:14,textAlign:'center'}}>
-                  Reset email sent!
-                </Text>
-                <Text style={{color:C.textMuted,fontSize:12,textAlign:'center',lineHeight:18}}>
-                  Check your inbox for a link to reset your password. Check your spam folder if you don't see it.
-                </Text>
-                <TouchableOpacity onPress={()=>{setShowReset(false);setResetSent(false);}}
-                  style={{paddingVertical:6}}>
-                  <Text style={{color:C.green400,fontSize:13}}>Back to sign in</Text>
-                </TouchableOpacity>
-              </View>
-            ):(
+            {resetStep==='send'?(
               <>
-                <Text style={{color:C.text,fontWeight:'700',fontSize:13}}>
-                  Reset your password
-                </Text>
-                <Text style={{color:C.textMuted,fontSize:12}}>
-                  Enter your email and we'll send you a reset link.
-                </Text>
+                <View style={{gap:4}}>
+                  <Text style={{color:C.text,fontWeight:'700',fontSize:13}}>
+                    Reset your password
+                  </Text>
+                  <Text style={{color:C.textMuted,fontSize:12,lineHeight:17}}>
+                    We'll send a 6-digit code to your email. No links to click — just type the code here.
+                  </Text>
+                </View>
                 <TouchableOpacity
                   onPress={async()=>{
                     if(!email.trim()){setAuthError('Enter your email first.');return;}
                     setLoading(true);setAuthError('');
                     try{
-                      await supabaseResetPassword(email.trim().toLowerCase());
-                      setResetSent(true);
+                      await supabaseSendResetOtp(email.trim().toLowerCase());
+                      setResetStep('verify');setResetOtp('');
                     }catch(e){
-                      setAuthError(e.message||'Could not send reset email.');
+                      setAuthError(e.message||'Could not send code. Check your email address.');
                     }
                     setLoading(false);
                   }}
@@ -2832,12 +2826,59 @@ function ParentLoginScreen(){
                   style={{backgroundColor:loading?C.surface:C.green500,
                     borderRadius:10,padding:12,alignItems:'center',opacity:loading?0.6:1}}>
                   <Text style={{color:loading?C.textMuted:C.bg,fontWeight:'800',fontSize:14}}>
-                    {loading?'Sending...':'Send reset email'}
+                    {loading?'Sending...':'Send 6-digit code'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={()=>{setShowReset(false);setAuthError('');}}
                   style={{alignItems:'center',paddingVertical:2}}>
                   <Text style={{color:C.textMuted,fontSize:12}}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ):(
+              <>
+                <View style={{gap:4}}>
+                  <Text style={{fontSize:28,textAlign:'center'}}>📧</Text>
+                  <Text style={{color:C.green400,fontWeight:'800',fontSize:14,textAlign:'center'}}>
+                    Check your email
+                  </Text>
+                  <Text style={{color:C.textMuted,fontSize:12,textAlign:'center',lineHeight:17}}>
+                    We sent a 6-digit code to {email.trim()}. Enter it below — check spam if you don't see it.
+                  </Text>
+                </View>
+                <TextInput
+                  value={resetOtp} onChangeText={v=>setResetOtp(v.replace(/\D/g,'').slice(0,6))}
+                  placeholder="6-digit code"
+                  placeholderTextColor={C.textFaint}
+                  keyboardType="number-pad"
+                  textAlign="center"
+                  style={{backgroundColor:C.bg,borderRadius:10,borderWidth:1.5,
+                    borderColor:C.border,padding:14,color:C.text,
+                    fontSize:26,fontWeight:'800',letterSpacing:8}}
+                />
+                <TouchableOpacity
+                  onPress={async()=>{
+                    if(resetOtp.length<6){setAuthError('Enter the full 6-digit code.');return;}
+                    setLoading(true);setAuthError('');
+                    try{
+                      await supabaseVerifyResetOtp(email.trim().toLowerCase(),resetOtp);
+                      dispatch({type:'SHOW_RESET_PASSWORD'});
+                      setShowReset(false);setResetStep('send');setResetOtp('');
+                    }catch(e){
+                      setAuthError(e.message||'Invalid code. Check your email and try again.');
+                    }
+                    setLoading(false);
+                  }}
+                  disabled={loading||resetOtp.length<6}
+                  style={{backgroundColor:loading||resetOtp.length<6?C.surface:C.green500,
+                    borderRadius:10,padding:12,alignItems:'center',
+                    opacity:loading||resetOtp.length<6?0.5:1}}>
+                  <Text style={{color:loading||resetOtp.length<6?C.textMuted:C.bg,fontWeight:'800',fontSize:14}}>
+                    {loading?'Verifying...':'Verify code'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={()=>{setResetStep('send');setResetOtp('');setAuthError('');}}
+                  style={{alignItems:'center',paddingVertical:2}}>
+                  <Text style={{color:C.textMuted,fontSize:12}}>← Resend code</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -6851,28 +6892,11 @@ function RootApp(){
     else{setScreen(APP.login);}
   },[state.loggedIn,state.hasSeenParentWelcome,state._loaded]);// eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle deep link from password reset email
+  // Deep link handler — kept for future use (Amazon, other schemes)
   useEffect(()=>{
-    const processResetUrl=async(url)=>{
-      if(!url||!url.includes('reset-password'))return;
-      // Supabase implicit flow puts tokens in the hash fragment:
-      // moneycells://reset-password#access_token=XX&refresh_token=YY&type=recovery
-      const hash=url.split('#')[1]||'';
-      const params=new URLSearchParams(hash);
-      const accessToken=params.get('access_token');
-      const refreshToken=params.get('refresh_token');
-      if(accessToken&&refreshToken){
-        // Hand the tokens to Supabase — onAuthStateChange fires PASSWORD_RECOVERY
-        await supabase.auth.setSession({access_token:accessToken,refresh_token:refreshToken});
-      }
-      setScreen(APP.login);
-    };
-    const handleDeepLink=({url})=>processResetUrl(url);
-    const sub=Linking.addEventListener('url',handleDeepLink);
-    // Handle case where app was cold-launched from the reset link
-    Linking.getInitialURL().then(url=>processResetUrl(url)).catch(()=>{});
+    const sub=Linking.addEventListener('url',()=>{});
     return()=>sub.remove();
-  },[]);// eslint-disable-line react-hooks/exhaustive-deps
+  },[]);
 
   // Show splash while loading from storage (prevents flash of login screen)
   if(!state._loaded)return(
