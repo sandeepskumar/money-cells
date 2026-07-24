@@ -54,6 +54,16 @@ const C = {
   text:'#f0fdf4', textMuted:'#4d7c5f', textFaint:'#2d5a3d',
 };
 
+// ── Per-colony accent palette (hue values in HSL, cycles every 5) ──────────
+// Colony 1=green, 2=cyan, 3=purple, 4=coral, 5=gold, then repeats
+const COLONY_HUES=[130,190,270,10,45];
+function colonyAccent(num){return COLONY_HUES[((num||1)-1)%COLONY_HUES.length];}
+// Pre-built hex accent colours used in non-HSL contexts (ring, buttons, etc.)
+const COLONY_HEX=['#4ade80','#22d3ee','#c084fc','#fb7185','#fbbf24'];
+function colonyHex(num){return COLONY_HEX[((num||1)-1)%COLONY_HEX.length];}
+// Gem colours for the 5 resistance stars (fixed, independent of colony)
+const GEM_COLORS=['#f87171','#fb923c','#facc15','#4ade80','#818cf8'];
+
 // ── Performance tiers ──────────────────────────────────────────────────────
 // Tier 1 (≤20): full animations. Tier 2 (21-35): breathe only. Tier 3 (36-50): static dots.
 const TIER1_MAX = 20;
@@ -397,32 +407,29 @@ const RATE_STORIES = {
 
 // ── Game Engine ────────────────────────────────────────────────────────────
 function cellSeed(id){return id.split('').reduce((a,c)=>a+c.charCodeAt(0),0);}
-function makeCell(){
+function makeCell(baseHue=130){
   let x,y,tries=0;
   do{x=Math.random();y=Math.random();tries++;}
   while(Math.sqrt((x-.5)**2+(y-.5)**2)>.42&&tries<50);
   const id=`c${++_id}_${Math.random().toString(36).slice(2,5)}`;
   const s=cellSeed(id);
-  // Organelles: 3 small dots at fixed relative positions (deterministic from seed)
   const organelles=[
     {angle:(s%100)/100*Math.PI*2,        dist:0.30+(s%5)*0.02},
     {angle:(s%100)/100*Math.PI*2+2.094,  dist:0.28+(s%4)*0.02},
     {angle:(s%100)/100*Math.PI*2+4.189,  dist:0.32+(s%3)*0.02},
   ];
-  // elongAngle: random axis this cell elongates along (radians, fixed per cell)
-  // Derived from seed so it's stable across re-renders
-  const elongAngle=(s%314)/100*Math.PI; // 0–π covers all unique axes
+  const elongAngle=(s%314)/100*Math.PI;
   return{id,x,y,spendState:'none',pendingAt:null,marked:false,isNew:true,burst:false,splitting:false,
     breathOffset:(s%100)/100*Math.PI*2,breathSpeed:1400+(s%800),
     floatSeedX:(s%10)/10*Math.PI*2,floatSeedY:((s*7)%10)/10*Math.PI*2,
     floatSpeedX:2000+(s%1200),floatSpeedY:1800+((s*3)%1400),
     nucleusOX:(s%7)-3,nucleusOY:((s*3)%7)-3,
-    hue:130+(s%5)*8,
+    hue:baseHue+(s%5)*8,
     elongAngle,
     organelles,
   };
 }
-function scatter(n){return Array.from({length:n},makeCell);}
+function scatter(n,baseHue=130){return Array.from({length:n},()=>makeCell(baseHue));}
 
 // Build a retired colony record from current game state
 function retireColony(state){
@@ -460,8 +467,9 @@ function createGame(name,principal,rate,wishId,colonyNumber=1,bonusStarters=0,in
        color:resolvedGoal.color||C.orange,
        status:'saving',addedAt:Date.now()}]
     :[];
+  const baseHue=colonyAccent(colonyNumber);
   return{name,principal,rate,
-    cells:scatter(startCells).map(c=>({...c,isNew:false})),
+    cells:scatter(startCells,baseHue).map(c=>({...c,isNew:false})),
     phase:'active',round:1,streak:0,bestStreak:0,level:1,
     timer:TIMER_MAX,badges:[],history:[],
     owned:[],wishTarget:resolvedGoal?.isAmazon?null:(resolvedGoal?.id||null),
@@ -549,7 +557,7 @@ function resolveRound(state){
   const nextFlashDeal=(!state.flashDeal&&Math.random()<0.35)?pickFlashDeal(state.owned||[]):null;
   return{...state,
     cells:[...kept.map(c=>({...c,spendState:'none',pendingAt:null,marked:false,isNew:false,burst:false,splitting:false})),
-      ...spent.map(c=>({...c,burst:true})),...scatter(cappedNew)],
+      ...spent.map(c=>({...c,burst:true})),...scatter(cappedNew,colonyAccent(state.colonyNumber||1))],
     phase:level>state.level?'levelup':'results',
     round:state.round+1,streak,bestStreak,level,timer:TIMER_MAX,
     roundInteractions:0,
@@ -612,7 +620,7 @@ function appReducer(state,action){
         email:action.email,pin:action.pin,
         settings:{cellToDollar:100,affiliateTag:'moneycells-20'},
         kids:[
-          {id:'kid1',name:'My Child',avatar:'🌟',age:8,game:null,sessions:[],totalPlayTime:0,
+          {id:'kid1',name:'Kid 1',avatar:'🌟',age:8,game:null,sessions:[],totalPlayTime:0,
             ledger:{vaultCents:0,paidOutCents:0,cellsAtLastSettle:0,lastSettledAt:null,history:[]},
             amazonWishList:[],kidFeedback:[]},
         ],
@@ -661,10 +669,22 @@ function appReducer(state,action){
       return{...state,parent:{...state.parent,kids:updatedKids}};
     }
     case 'ADD_KID':{
-      const k={id:`kid_${Date.now()}`,name:action.name,avatar:action.avatar,age:action.age,
+      const existingKids=state.parent?.kids||[];
+      const autoName=action.name||`Kid ${existingKids.length+1}`;
+      const k={id:`kid_${Date.now()}`,name:autoName,avatar:action.avatar||'🌟',age:action.age||8,
         game:null,sessions:[],totalPlayTime:0,
         ledger:{vaultCents:0,paidOutCents:0,cellsAtLastSettle:0,lastSettledAt:null,history:[]},amazonWishList:[]};
-      return{...state,parent:{...state.parent,kids:[...(state.parent.kids||[]),k]}};
+      return{...state,parent:{...state.parent,kids:[...existingKids,k]}};
+    }
+    case 'RENAME_KID':{
+      if(!state.parent)return state;
+      const kids=(state.parent.kids||[]).map(k=>k.id===action.kidId?{...k,name:action.name}:k);
+      return{...state,parent:{...state.parent,kids}};
+    }
+    case 'REMOVE_KID':{
+      if(!state.parent)return state;
+      const kids=(state.parent.kids||[]).filter(k=>k.id!==action.kidId);
+      return{...state,parent:{...state.parent,kids}};
     }
     case 'START_SESSION':
       return{...state,activeKidId:action.kidId,sessionActive:true,sessionDuration:action.duration,sessionStartTime:Date.now()};
@@ -1986,8 +2006,9 @@ function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer}){
 }
 
 // ── Dish + Session Timer ───────────────────────────────────────────────────
-function DishArea({cells,onTap,interactive,phase,sessionRemaining,sessionTotal,nearGrad,roundTimer,roundPct,roundColor,rateStory}){
-  const sc=sessionRemaining<=60?C.red:sessionRemaining<=120?C.amber:C.green400;
+function DishArea({cells,onTap,interactive,phase,sessionRemaining,sessionTotal,nearGrad,roundTimer,roundPct,roundColor,rateStory,colonyColor}){
+  const idleColor=colonyColor||C.green400;
+  const sc=sessionRemaining<=60?C.red:sessionRemaining<=120?C.amber:idleColor;
   const urgent=sessionRemaining<=120,critical=sessionRemaining<=30;
   const ringPulse=useRef(new Animated.Value(1)).current;
   useEffect(()=>{ // eslint-disable-line react-hooks/exhaustive-deps
@@ -2898,13 +2919,33 @@ function ParentLoginScreen(){
 function ParentHomeScreen({onStartSession,onDashboard}){
   const{state,dispatch}=useApp();const[addingKid,setAddingKid]=useState(false);
   const[newName,setNewName]=useState('');const[newAvatar,setNewAvatar]=useState(KID_AVATARS[0]);
+  const[editingKidId,setEditingKidId]=useState(null);
+  const[editingName,setEditingName]=useState('');
   const[showChangePinModal,setShowChangePinModal]=useState(false);
+  // cpStep: 'current' → 'new' → 'confirm' | 'password' (forgot-PIN path) → 'new' → 'confirm'
+  const[cpStep,setCpStep]=useState('current');
   const[cpCurrent,setCpCurrent]=useState('');
   const[cpNew,setCpNew]=useState('');
   const[cpConfirm,setCpConfirm]=useState('');
   const[cpError,setCpError]=useState('');
   const[cpSuccess,setCpSuccess]=useState(false);
-  const resetChangePinModal=()=>{setShowChangePinModal(false);setCpCurrent('');setCpNew('');setCpConfirm('');setCpError('');setCpSuccess(false);};
+  const[cpPassword,setCpPassword]=useState('');
+  const[cpPasswordLoading,setCpPasswordLoading]=useState(false);
+  const resetChangePinModal=()=>{
+    setShowChangePinModal(false);
+    setCpStep('current');setCpCurrent('');setCpNew('');setCpConfirm('');
+    setCpError('');setCpSuccess(false);setCpPassword('');setCpPasswordLoading(false);
+  };
+  const handleCpForgot=async()=>{
+    if(!cpPassword){setCpError('Enter your account password.');return;}
+    setCpPasswordLoading(true);setCpError('');
+    const email=state.supabaseUser?.email;
+    if(!email){setCpError('No account email found.');setCpPasswordLoading(false);return;}
+    const{error:err}=await supabase.auth.signInWithPassword({email,password:cpPassword});
+    setCpPasswordLoading(false);
+    if(err){setCpError('Wrong password. Try again.');setCpPassword('');return;}
+    setCpStep('new');setCpPassword('');
+  };
   const kids=state.parent?.kids||[];
   if(addingKid){
     return(
@@ -2912,8 +2953,8 @@ function ParentHomeScreen({onStartSession,onDashboard}){
         <ScrollView contentContainerStyle={{padding:24,gap:16}}>
           <View style={{flexDirection:'row',alignItems:'center',gap:8}}><TouchableOpacity onPress={()=>setAddingKid(false)}><Text style={{color:C.green400,fontSize:16}}>←</Text></TouchableOpacity><Text style={ss.h1}>Add a Child</Text></View>
           <View style={{flexDirection:'row',flexWrap:'wrap',gap:10}}>{KID_AVATARS.map(a=>(<TouchableOpacity key={a} onPress={()=>setNewAvatar(a)} style={{width:56,height:56,borderRadius:28,backgroundColor:newAvatar===a?C.green900:C.card,borderWidth:2,borderColor:newAvatar===a?C.green400:C.border,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:28}}>{a}</Text></TouchableOpacity>))}</View>
-          <TextInput value={newName} onChangeText={setNewName} placeholder="Child's name" placeholderTextColor={C.textFaint} style={ss.input} autoFocus/>
-          <Btn label="Add Child →" onPress={()=>{if(!newName)return;dispatch({type:'ADD_KID',name:newName,avatar:newAvatar,age:8});setAddingKid(false);setNewName('');}} primary/>
+          <TextInput value={newName} onChangeText={setNewName} placeholder={`Kid ${kids.length+1} (optional)`} placeholderTextColor={C.textFaint} style={ss.input} autoFocus/>
+          <Btn label="Add Child →" onPress={()=>{dispatch({type:'ADD_KID',name:newName.trim(),avatar:newAvatar,age:8});setAddingKid(false);setNewName('');}} primary/>
         </ScrollView>
       </SafeAreaView>
     );
@@ -2929,18 +2970,75 @@ function ParentHomeScreen({onStartSession,onDashboard}){
         {kids.length===0&&<View style={{backgroundColor:C.card,borderRadius:14,borderWidth:1,borderColor:C.border,padding:24,alignItems:'center'}}><Text style={{fontSize:40}}>👶</Text><Text style={{color:C.textMuted,fontSize:13,textAlign:'center',marginTop:8}}>No kids added yet!</Text></View>}
         {kids.map(kid=>{
           const g=kid.game;const retired=(g?.retiredColonies||[]).length;
+          const isEditing=editingKidId===kid.id;
+          if(isEditing){
+            return(
+              <View key={kid.id} style={{backgroundColor:C.card,borderRadius:14,borderWidth:1.5,borderColor:C.green700,padding:16,gap:12}}>
+                <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
+                  <View style={{width:48,height:48,borderRadius:24,backgroundColor:C.green900,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:C.green700}}>
+                    <Text style={{fontSize:26}}>{kid.avatar}</Text>
+                  </View>
+                  <TextInput
+                    value={editingName}
+                    onChangeText={setEditingName}
+                    placeholder="Kid's name"
+                    placeholderTextColor={C.textFaint}
+                    autoFocus
+                    style={{flex:1,backgroundColor:C.bg,borderRadius:8,borderWidth:1.5,
+                      borderColor:C.green700,padding:10,color:C.text,fontSize:15,fontWeight:'700'}}
+                  />
+                </View>
+                <View style={{flexDirection:'row',gap:8}}>
+                  <TouchableOpacity
+                    onPress={()=>{
+                      const trimmed=editingName.trim();
+                      if(trimmed){dispatch({type:'RENAME_KID',kidId:kid.id,name:trimmed});}
+                      setEditingKidId(null);setEditingName('');
+                    }}
+                    style={{flex:1,backgroundColor:C.green500,borderRadius:10,padding:11,alignItems:'center'}}>
+                    <Text style={{color:C.bg,fontWeight:'800',fontSize:14}}>✅ Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={()=>{setEditingKidId(null);setEditingName('');}}
+                    style={{flex:1,backgroundColor:C.surface,borderRadius:10,padding:11,alignItems:'center',borderWidth:1,borderColor:C.border}}>
+                    <Text style={{color:C.textMuted,fontWeight:'700',fontSize:14}}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={()=>Alert.alert(
+                      `Remove ${kid.name}?`,
+                      'This removes the kid profile and all their game data. This cannot be undone.',
+                      [{text:'Cancel',style:'cancel'},
+                       {text:'Remove',style:'destructive',onPress:()=>{
+                         dispatch({type:'REMOVE_KID',kidId:kid.id});
+                         setEditingKidId(null);setEditingName('');
+                       }}]
+                    )}
+                    style={{backgroundColor:'#3a0d0d',borderRadius:10,padding:11,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.red+'44',paddingHorizontal:14}}>
+                    <Text style={{fontSize:16}}>🗑️</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }
           return(
-            <TouchableOpacity key={kid.id} onPress={()=>onStartSession(kid.id)} style={{backgroundColor:C.card,borderRadius:14,borderWidth:1.5,borderColor:C.border,padding:16}}>
-              <View style={{flexDirection:'row',alignItems:'center',gap:14}}>
+            <View key={kid.id} style={{backgroundColor:C.card,borderRadius:14,borderWidth:1.5,borderColor:C.border}}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:14,padding:16}}>
                 <View style={{width:56,height:56,borderRadius:28,backgroundColor:C.green900,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:C.green700}}><Text style={{fontSize:30}}>{kid.avatar}</Text></View>
                 <View style={{flex:1}}>
                   <Text style={{color:C.text,fontWeight:'800',fontSize:16}}>{kid.name}</Text>
                   <Text style={{color:C.textMuted,fontSize:12,marginTop:2}}>{g?`Colony #${g.colonyNumber||1} · ${g.cells?.filter(c=>!c.burst).length??0}/${COLONY_CAP} cells`:'New player'}</Text>
                   {retired>0&&<Text style={{color:C.green400,fontSize:11,marginTop:1}}>🏛️ {retired} retired {retired===1?'colony':'colonies'} in museum</Text>}
                 </View>
-                <View style={{backgroundColor:C.green500,borderRadius:10,paddingHorizontal:14,paddingVertical:8}}><Text style={{color:C.bg,fontWeight:'800',fontSize:13}}>Play ▶</Text></View>
+                <TouchableOpacity onPress={()=>{setEditingKidId(kid.id);setEditingName(kid.name);}}
+                  style={{padding:8,marginRight:4}}>
+                  <Text style={{fontSize:16,color:C.textMuted}}>✏️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={()=>onStartSession(kid.id)}
+                  style={{backgroundColor:C.green500,borderRadius:10,paddingHorizontal:14,paddingVertical:8}}>
+                  <Text style={{color:C.bg,fontWeight:'800',fontSize:13}}>Play ▶</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           );
         })}
         <TouchableOpacity onPress={()=>setAddingKid(true)} style={{backgroundColor:C.surface,borderRadius:14,borderWidth:1.5,borderColor:C.border,borderStyle:'dashed',padding:16,alignItems:'center',flexDirection:'row',justifyContent:'center',gap:8}}>
@@ -2981,10 +3079,19 @@ function ParentHomeScreen({onStartSession,onDashboard}){
           <View style={{backgroundColor:C.card,borderRadius:16,borderWidth:1.5,
             borderColor:C.border,padding:24,gap:14}}>
             <View style={{alignItems:'center',gap:4}}>
-              <Text style={{fontSize:36}}>{cpSuccess?'✅':'🔒'}</Text>
+              <Text style={{fontSize:36}}>{cpSuccess?'✅':cpStep==='password'?'🔑':'🔒'}</Text>
               <Text style={{color:C.text,fontWeight:'800',fontSize:18}}>
-                {cpSuccess?'PIN updated!':'Change your PIN'}
+                {cpSuccess?'PIN updated!'
+                  :cpStep==='current'?'Enter current PIN'
+                  :cpStep==='password'?'Verify with password'
+                  :cpStep==='new'?'Enter new PIN'
+                  :'Confirm new PIN'}
               </Text>
+              {cpStep==='password'&&(
+                <Text style={{color:C.textMuted,fontSize:12,textAlign:'center'}}>
+                  Enter your account password to reset your PIN
+                </Text>
+              )}
             </View>
             {cpSuccess?(
               <Text style={{color:C.textMuted,fontSize:13,textAlign:'center'}}>
@@ -2992,37 +3099,84 @@ function ParentHomeScreen({onStartSession,onDashboard}){
               </Text>
             ):(
               <>
-                <View style={{gap:6}}>
-                  <Text style={{color:C.textMuted,fontSize:12}}>Current PIN</Text>
-                  <PinInput value={cpCurrent} onChange={v=>{setCpCurrent(v);setCpError('');}} label=""/>
+                {/* Step: enter current PIN */}
+                {cpStep==='current'&&(<>
+                  <PinInput label="" value={cpCurrent} onChange={v=>{
+                    setCpError('');setCpCurrent(v);
+                    if(v.length===4){
+                      if(v===state.parent?.pin){setCpStep('new');setCpCurrent('');}
+                      else{setCpError('Wrong PIN. Try again.');setTimeout(()=>setCpCurrent(''),300);}
+                    }
+                  }}/>
+                  <TouchableOpacity onPress={()=>{setCpError('');setCpCurrent('');setCpStep('password');}}
+                    style={{alignItems:'center',paddingVertical:4}}>
+                    <Text style={{color:C.blue,fontSize:13}}>Forgot PIN? Verify with password →</Text>
+                  </TouchableOpacity>
+                </>)}
+
+                {/* Step: verify via account password (forgot-PIN path) */}
+                {cpStep==='password'&&(<>
+                  <TextInput
+                    value={cpPassword} onChangeText={v=>{setCpPassword(v);setCpError('');}}
+                    placeholder="Account password"
+                    placeholderTextColor={C.textFaint}
+                    secureTextEntry autoFocus
+                    style={{backgroundColor:C.bg,borderRadius:10,borderWidth:1.5,
+                      borderColor:cpError?C.red:C.border,padding:14,color:C.text,fontSize:15}}
+                  />
+                  <TouchableOpacity onPress={handleCpForgot} disabled={cpPasswordLoading}
+                    style={{backgroundColor:cpPasswordLoading?C.surface:C.green500,
+                      borderRadius:10,padding:14,alignItems:'center',opacity:cpPasswordLoading?0.6:1}}>
+                    <Text style={{color:cpPasswordLoading?C.textMuted:C.bg,fontWeight:'800',fontSize:15}}>
+                      {cpPasswordLoading?'Verifying...':'Verify & continue →'}
+                    </Text>
+                  </TouchableOpacity>
+                </>)}
+
+                {/* Step: enter new PIN */}
+                {cpStep==='new'&&(
+                  <PinInput label="" value={cpNew} onChange={v=>{
+                    setCpError('');setCpNew(v);
+                    if(v.length===4){setCpStep('confirm');}
+                  }}/>
+                )}
+
+                {/* Step: confirm new PIN */}
+                {cpStep==='confirm'&&(
+                  <PinInput label="" value={cpConfirm} onChange={v=>{
+                    setCpError('');setCpConfirm(v);
+                    if(v.length===4){
+                      if(v===cpNew){
+                        dispatch({type:'SET_PIN',pin:cpNew});
+                        setCpSuccess(true);
+                        setTimeout(resetChangePinModal,1800);
+                      }else{
+                        setCpError("PINs don't match. Try again.");
+                        setTimeout(()=>setCpConfirm(''),300);
+                      }
+                    }
+                  }}/>
+                )}
+
+                {!!cpError&&<Text style={{color:C.red,fontSize:12,textAlign:'center',marginTop:4}}>{cpError}</Text>}
+
+                <View style={{flexDirection:'row',gap:8,marginTop:4}}>
+                  {(cpStep==='password'||cpStep==='new'||cpStep==='confirm')&&(
+                    <TouchableOpacity onPress={()=>{
+                      setCpError('');setCpPassword('');
+                      if(cpStep==='confirm'){setCpStep('new');setCpConfirm('');}
+                      else if(cpStep==='new'){setCpStep('current');setCpNew('');}
+                      else{setCpStep('current');}
+                    }} style={{flex:1,backgroundColor:C.surface,borderRadius:10,padding:12,alignItems:'center',borderWidth:1,borderColor:C.border}}>
+                      <Text style={{color:C.textMuted,fontWeight:'700',fontSize:13}}>← Back</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={resetChangePinModal}
+                    style={{flex:1,alignItems:'center',paddingVertical:12}}>
+                    <Text style={{color:C.textMuted,fontSize:13}}>Cancel</Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={{gap:6}}>
-                  <Text style={{color:C.textMuted,fontSize:12}}>New PIN</Text>
-                  <PinInput value={cpNew} onChange={v=>{setCpNew(v);setCpError('');}} label=""/>
-                </View>
-                <View style={{gap:6}}>
-                  <Text style={{color:C.textMuted,fontSize:12}}>Confirm new PIN</Text>
-                  <PinInput value={cpConfirm} onChange={v=>{setCpConfirm(v);setCpError('');}} label=""/>
-                </View>
-                {!!cpError&&<Text style={{color:C.red,fontSize:12,textAlign:'center'}}>{cpError}</Text>}
-                <TouchableOpacity
-                  onPress={()=>{
-                    if(cpCurrent!==state.parent?.pin){setCpError('Current PIN is wrong.');setCpCurrent('');return;}
-                    if(cpNew.length<4){setCpError('New PIN must be 4 digits.');return;}
-                    if(cpNew!==cpConfirm){setCpError("PINs don't match.");setCpConfirm('');return;}
-                    dispatch({type:'SET_PIN',pin:cpNew});
-                    setCpSuccess(true);
-                    setTimeout(resetChangePinModal,1800);
-                  }}
-                  style={{backgroundColor:C.green500,borderRadius:10,padding:13,alignItems:'center'}}>
-                  <Text style={{color:C.bg,fontWeight:'800',fontSize:14}}>Update PIN</Text>
-                </TouchableOpacity>
               </>
-            )}
-            {!cpSuccess&&(
-              <TouchableOpacity onPress={resetChangePinModal} style={{alignItems:'center',paddingVertical:4}}>
-                <Text style={{color:C.textMuted,fontSize:13}}>Cancel</Text>
-              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -3033,7 +3187,7 @@ function ParentHomeScreen({onStartSession,onDashboard}){
 
 function StartSessionScreen({kidId,onConfirm,onBack}){
   const{state,dispatch}=useApp();const[pin,setPin]=useState('');const[duration,setDuration]=useState(TIMER_OPTIONS[1]);const[error,setError]=useState('');
-  const kid=state.parent?.kids?.find(k=>k.id===kidId)||{id:kidId,name:'My Child',avatar:'🌟',age:8};
+  const kid=state.parent?.kids?.find(k=>k.id===kidId)||{id:kidId,name:'Kid',avatar:'🌟',age:8};
   const handle=()=>{
     // If no PIN set yet (new Supabase accounts), any 4-digit PIN works as first-time setup
     const storedPin=state.parent?.pin;
@@ -3557,7 +3711,7 @@ function KidGameFlow({kidId,sessionDuration,onSessionEnd}){
     <View style={{flex:1}}>
       {screen==='setup'     &&<KidSetupScreen kidName={kid?.name||'Friend'} onDone={(nm,p,r,w,g)=>{gameDispatch({type:'INIT',name:nm,principal:p,rate:r,wishId:w,goal:g});setScreen('onboard');}}/>}
       {screen==='onboard'   &&<OnboardingScreen kidName={kid?.name||'Friend'} onDone={()=>{gameDispatch({type:'SEEN_ONBOARDING'});setScreen('game');}}/>}
-      {screen==='game'      &&game&&<KidGameScreen sessionRemaining={sessionRemaining} sessionTotal={sessionDuration} cellieOpen={cellieOpen} setCellieOpen={(v)=>{setCellieOpen(v);if(v){setCellieBubble(false);}}} cellieBubble={cellieBubble} cellieBubbleAnim={cellieBubbleAnim} cellieBubblePulse={cellieBubblePulse} setCellieBubble={setCellieBubble} onResults={()=>setScreen('results')} onLevelUp={()=>setScreen('levelup')} onShop={()=>setScreen('shop')} onMuseum={()=>setScreen('museum')} onQuit={handleQuit}/>}
+      {screen==='game'      &&game&&<KidGameScreen sessionRemaining={sessionRemaining} sessionTotal={sessionDuration} cellieOpen={cellieOpen} setCellieOpen={(v)=>{setCellieOpen(v);if(v){setCellieBubble(false);}}} cellieBubble={cellieBubble} cellieBubbleAnim={cellieBubbleAnim} cellieBubblePulse={cellieBubblePulse} setCellieBubble={setCellieBubble} onResults={()=>setScreen('results')} onLevelUp={()=>setScreen('levelup')} onShop={()=>setScreen('shop')} onMuseum={()=>setScreen('museum')} onQuit={handleQuit} onPinGate={setInGamePinGate}/>}
       {screen==='results'   &&<KidResultsScreen onNext={()=>setScreen('game')} onShop={()=>setScreen('shop')}/>}
       {screen==='levelup'   &&<KidLevelUpScreen onContinue={()=>setScreen('game')}/>}
       {screen==='graduating'&&game&&<ColonyGraduationScreen game={game} onContinue={handleGraduate}/>}
@@ -4398,7 +4552,7 @@ function KidSetupScreen({kidName,onDone}){
                         {selectedGoal.name}
                       </Text>
                       <Text style={{color:C.textMuted,fontSize:12,marginTop:2}}>
-                        {selectedGoal.cost} cells · {selectedGoal.priceUsd?`$${selectedGoal.priceUsd.toFixed(2)}`:''}
+                        {selectedGoal.cost} cells needed
                       </Text>
                     </View>
                     <TouchableOpacity onPress={()=>setSelectedGoal(null)}>
@@ -4478,9 +4632,7 @@ function KidSetupScreen({kidName,onDone}){
                           {item.name}
                         </Text>
                         <Text style={{color:C.textMuted,fontSize:12,marginTop:1}}>
-                          {item.cost} cells
-                          {item.priceUsd?` · $${item.priceUsd.toFixed(2)}`:''}
-                          {item.isAmazon?'  🛒':''}
+                          {item.cost} cells{item.isAmazon?'  🛒':''}
                         </Text>
                       </View>
                       {isSelected&&<Text style={{color:C.green400,fontSize:22}}>⭐</Text>}
@@ -4536,11 +4688,12 @@ function KidSetupScreen({kidName,onDone}){
                       // Parse header line: **Name** emoji · $price
                       // Search entire answer for the structured fields
                       const nameMatch=answer.match(/\*\*([^*\n]+)\*\*/);
-                      const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
+                      // Match price: plain number after · , OR any currency symbol ($₹€£¥) + number
+                      const priceMatch=answer.match(/·\s*[\$₹€£¥]?\s*(\d+(?:\.\d+)?)/)||answer.match(/[\$₹€£¥]\s*(\d+(?:\.\d+)?)/);
                       const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
                       const name=nameMatch
                         ?nameMatch[1].trim()
-                        :answer.split('\n')[0].replace(/\$[\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
+                        :answer.split('\n')[0].replace(/[\$₹€£¥][\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
                       const price=priceMatch?parseFloat(priceMatch[1]):20;
                       const emoji=emojiMatch?emojiMatch[0]:'🎯';
                       const cost=Math.max(1,Math.round(price));
@@ -4736,7 +4889,7 @@ function PauseModal({visible,onResume,onShop,onMuseum,onCellie,onQuit}){
   );
 }
 
-function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,cellieBubble,cellieBubbleAnim,cellieBubblePulse,setCellieBubble,onResults,onLevelUp,onShop,onMuseum,onQuit}){
+function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,cellieBubble,cellieBubbleAnim,cellieBubblePulse,setCellieBubble,onResults,onLevelUp,onShop,onMuseum,onQuit,onPinGate}){
   const{game,dispatch}=useGame();
   const{state:appState}=useApp();
   const[dealExpiredMsg,setDealExpiredMsg]=useState(null);
@@ -4883,10 +5036,12 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
   },[]);
   const nearGrad=count>=COLONY_WARN;
   const colonyNum=game.colonyNumber||1;
+  const cHue=colonyAccent(game.colonyNumber||1);
+  const cHex=colonyHex(game.colonyNumber||1);
   const instrText=confirmedCount>0?`😬 ${confirmedCount} confirmed · Tap again to undo!`:pendingCount>0?`⚡ Tap again to confirm · wait 3s to change your mind!`:'✨ Tap a cell to think about spending · leave them to multiply! 🧬';
-  const instrColor=confirmedCount>0?C.red:pendingCount>0?C.amber:C.green300;
-  const instrBg   =confirmedCount>0?C.red+'11':pendingCount>0?C.amber+'11':C.green900+'88';
-  const instrBorder=confirmedCount>0?C.red+'44':pendingCount>0?C.amber+'33':C.green700;
+  const instrColor=confirmedCount>0?C.red:pendingCount>0?C.amber:`hsl(${cHue},75%,72%)`;
+  const instrBg   =confirmedCount>0?C.red+'11':pendingCount>0?C.amber+'11':`hsla(${cHue},60%,15%,0.5)`;
+  const instrBorder=confirmedCount>0?C.red+'44':pendingCount>0?C.amber+'33':`hsla(${cHue},50%,35%,0.4)`;
 
   // ── Context slot priority ─────────────────────────────────────────────
   // Only ONE of these renders at a time — highest priority wins
@@ -4995,7 +5150,7 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
       // Amazon goal — requires parental PIN before opening Amazon
       const tag=appState.parent?.settings?.affiliateTag||'moneycells-20';
       const url=`https://www.amazon.com/s?k=${encodeURIComponent(wishItem.searchQ||wishItem.name)}&tag=${tag}&linkCode=ur2`;
-      setInGamePinGate({url, itemName:wishItem.name});
+      onPinGate&&onPinGate({url, itemName:wishItem.name});
       return;
     }
     // Built-in: select cells outer→center
@@ -5079,17 +5234,35 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
           <Text style={{color:C.textMuted,fontWeight:'400',fontSize:12}}>/{COLONY_CAP}</Text>
         </Text>
         <View style={{flex:1}}/>
-        {/* 5 stars — newest filled star bounces */}
-        <View style={{flexDirection:'row',gap:3,alignItems:'center',marginRight:10}}>
+        {/* 5 gem stars — each a different colour, glows when filled */}
+        <View style={{flexDirection:'row',gap:4,alignItems:'center',marginRight:10}}>
           {[0,1,2,3,4].map(i=>{
+            const filled=i<filledStars;
+            const gemColor=GEM_COLORS[i];
             const isNewStar=i===filledStars-1&&!!starToast;
-            return isNewStar?(
-              <Animated.Text key={i}
-                style={{fontSize:22,transform:[{scale:starBounce}]}}>⭐</Animated.Text>
-            ):(
-              <Text key={i} style={{fontSize:i<filledStars?18:14,
-                opacity:i<filledStars?1:0.2}}>⭐</Text>
+            const gem=(
+              <View key={i} style={{
+                width:filled?20:16,height:filled?20:16,
+                borderRadius:4,
+                backgroundColor:filled?gemColor:'transparent',
+                borderWidth:1.5,borderColor:filled?gemColor:C.textFaint,
+                alignItems:'center',justifyContent:'center',
+                shadowColor:filled?gemColor:'transparent',
+                shadowOffset:{width:0,height:0},
+                shadowOpacity:filled?0.9:0,shadowRadius:6,elevation:filled?4:0,
+              }}/>
             );
+            return isNewStar?(
+              <Animated.View key={i} style={{transform:[{scale:starBounce}]}}>
+                <View style={{
+                  width:22,height:22,borderRadius:5,
+                  backgroundColor:gemColor,
+                  borderWidth:2,borderColor:'#fff',
+                  shadowColor:gemColor,shadowOffset:{width:0,height:0},
+                  shadowOpacity:1,shadowRadius:8,elevation:6,
+                }}/>
+              </Animated.View>
+            ):gem;
           })}
         </View>
         {/* Star gain toast — slides up above status bar */}
@@ -5133,6 +5306,7 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
             roundPct={pct}
             roundColor={tc}
             rateStory={rs}
+            colonyColor={cHex}
           />
 
         </View>
@@ -5292,11 +5466,6 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
 
       {/* ── ZONE 4: Save button — gated for engagement ────────────── */}
       <View style={{paddingHorizontal:16,paddingBottom:20}}>
-        {phase==='active'&&count>=10&&(game.roundInteractions||0)===0&&(
-          <Text style={{color:C.textMuted,fontSize:11,textAlign:'center',marginBottom:6}}>
-            💡 Tap a cell first to think about spending
-          </Text>
-        )}
         <Btn
           label={phase==='splitting'?'✂️  Splitting...':'✅  Save All & Split!'}
           onPress={phase==='active'
@@ -5694,11 +5863,24 @@ function KidResultsScreen({onNext,onShop}){
           </TouchableOpacity>
         )}
 
-        <Animated.View style={{backgroundColor:C.card,borderRadius:12,borderWidth:1,borderColor:C.border,padding:14,opacity:fadeA}}>
-          <Text style={{fontSize:24,textAlign:'center',marginBottom:6}}>{story.emoji}</Text>
-          <Text style={{color:C.green400,fontWeight:'800',fontSize:15,textAlign:'center',marginBottom:4}}>{story.title}</Text>
-          <Text style={{color:C.textMuted,fontSize:13,textAlign:'center',lineHeight:19}}>{story.body}</Text>
-        </Animated.View>
+        {game.badges.length>0&&game.badges.slice(-1).map(b=>BADGE_INFO[b]?(
+          <TouchableOpacity key={b} onPress={()=>setShowLesson(showLesson===b?null:b)}
+            style={{backgroundColor:C.card,borderRadius:12,borderWidth:1,
+              borderColor:showLesson===b?C.amber:C.border,padding:12}}>
+            <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+              <Text style={{fontSize:28}}>{BADGE_INFO[b].emoji}</Text>
+              <View style={{flex:1}}>
+                <Text style={{color:C.text,fontWeight:'700'}}>{BADGE_INFO[b].label}</Text>
+                <Text style={{color:C.textMuted,fontSize:11}}>Tap to learn! 👆</Text>
+              </View>
+            </View>
+            {showLesson===b&&(
+              <View style={{marginTop:10,backgroundColor:C.amber+'11',borderRadius:8,padding:10,borderWidth:1,borderColor:C.amber+'44'}}>
+                <Text style={{color:C.amber,fontSize:12,lineHeight:18}}>{BADGE_INFO[b].kidLesson}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ):null)}
 
         {gained>0?(
           <View style={{backgroundColor:'#0d1a0d',borderRadius:12,borderWidth:1,borderColor:C.green700,padding:12,gap:6}}>
@@ -5732,10 +5914,6 @@ function KidResultsScreen({onNext,onShop}){
             ))}
           </View>
         ):null}
-
-        {game.badges.length>0&&game.badges.slice(-1).map(b=>BADGE_INFO[b]?(<TouchableOpacity key={b} onPress={()=>setShowLesson(showLesson===b?null:b)} style={{backgroundColor:C.card,borderRadius:12,borderWidth:1,borderColor:showLesson===b?C.amber:C.border,padding:12}}><View style={{flexDirection:'row',alignItems:'center',gap:10}}><Text style={{fontSize:28}}>{BADGE_INFO[b].emoji}</Text><View style={{flex:1}}><Text style={{color:C.text,fontWeight:'700'}}>{BADGE_INFO[b].label}</Text><Text style={{color:C.textMuted,fontSize:11}}>Tap to learn! 👆</Text></View></View>{showLesson===b&&<View style={{marginTop:10,backgroundColor:C.amber+'11',borderRadius:8,padding:10,borderWidth:1,borderColor:C.amber+'44'}}><Text style={{color:C.amber,fontSize:12,lineHeight:18}}>{BADGE_INFO[b].kidLesson}</Text></View>}</TouchableOpacity>):null)}
-
-        {game.streak>=2&&<View style={{backgroundColor:C.amber+'11',borderRadius:10,borderWidth:1,borderColor:C.amber+'44',padding:12}}><Text style={{color:C.amber,fontWeight:'800',fontSize:13}}>⛄ {game.streak}-round snowball! Keep saving!</Text></View>}
 
         {/* 🧬 Cellie Challenge — every 3rd round */}
         {showQuiz&&quizQ&&(
@@ -5968,7 +6146,7 @@ function AddCustomItemModal({visible,onAdd,onClose,cellToDollar}){
           {/* Price */}
           <View style={{gap:6}}>
             <Text style={{color:C.textMuted,fontSize:12,fontWeight:'700',letterSpacing:0.5}}>
-              HOW MUCH DOES IT COST? (USD)
+              HOW MANY CELLS DOES IT COST?
             </Text>
             <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
               <View style={[ss.input,{flex:1,flexDirection:'row',alignItems:'center',gap:6,paddingVertical:0}]}>
@@ -6278,9 +6456,6 @@ function UnifiedShopScreen({onBack,kidName}){
                   <View style={{flex:1}}>
                     <Text style={{color:C.text,fontWeight:'800',fontSize:13}}>{item.name}</Text>
                     <View style={{flexDirection:'row',alignItems:'center',gap:6,marginTop:2}}>
-                      {item.isAmazon
-                        ?<Text style={{color:C.orange,fontWeight:'700',fontSize:12}}>${item.priceUsd?.toFixed(2)}</Text>
-                        :null}
                       <Text style={{color:C.textMuted,fontSize:12}}>{item.cost} cells</Text>
                       {ready&&<View style={{backgroundColor:C.green900,borderRadius:4,
                         paddingHorizontal:6,paddingVertical:1,borderWidth:1,borderColor:C.green700}}>
@@ -6455,10 +6630,10 @@ function UnifiedShopScreen({onBack,kidName}){
                 const data=await resp.json();
                 const answer=data.answer||'';
                 const nameMatch=answer.match(/\*\*([^*\n]+)\*\*/);
-                const priceMatch=answer.match(/\$(\d+(?:\.\d+)?)/);
+                const priceMatch=answer.match(/·\s*[\$₹€£¥]?\s*(\d+(?:\.\d+)?)/)||answer.match(/[\$₹€£¥]\s*(\d+(?:\.\d+)?)/);
                 const emojiMatch=answer.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u);
                 const name=nameMatch?nameMatch[1].trim()
-                  :answer.split('\n')[0].replace(/\$[\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
+                  :answer.split('\n')[0].replace(/[\$₹€£¥][\d.]+/g,'').replace(/[*·]/g,'').trim().slice(0,40)||'My Goal';
                 const price=priceMatch?parseFloat(priceMatch[1]):20;
                 const emoji=emojiMatch?emojiMatch[0]:'🎯';
                 const cost=Math.max(1,Math.round(price));
@@ -6550,7 +6725,6 @@ function UnifiedShopScreen({onBack,kidName}){
                       <Text style={{color:isActive?C.text:C.textMuted,
                         fontWeight:'800',fontSize:15}}>{goal.name}</Text>
                       <View style={{flexDirection:'row',alignItems:'center',gap:6,marginTop:2}}>
-                        {goal.isAmazon&&<Text style={{color:C.orange,fontSize:12}}>${goal.priceUsd?.toFixed(2)}</Text>}
                         <Text style={{color:C.textMuted,fontSize:12}}>{goal.cost} cells needed</Text>
                       </View>
                       {/* Progress bar */}
@@ -6861,7 +7035,11 @@ function SetNewPasswordScreen({onDone}){
   const[confirm,setConfirm]=useState('');
   const[loading,setLoading]=useState(false);
   const[error,setError]=useState('');
-  const[success,setSuccess]=useState(false);
+  // step: 'password' → 'pin' → 'pinConfirm' → 'done'
+  const[step,setStep]=useState('password');
+  const[newPin,setNewPin]=useState('');
+  const[pinConfirm,setPinConfirm]=useState('');
+  const[pinError,setPinError]=useState('');
 
   const handleSet=async()=>{
     if(!password||password.length<6){setError('Password must be at least 6 characters.');return;}
@@ -6870,17 +7048,18 @@ function SetNewPasswordScreen({onDone}){
     try{
       const{error:err}=await supabase.auth.updateUser({password});
       if(err)throw err;
-      // Sign out the recovery session so the user signs in fresh with the new password
-      await supabase.auth.signOut();
-      setSuccess(true);
-      setTimeout(()=>{
-        dispatch({type:'RESET_AUTH_STATE'}); // clears loggedIn + supabaseUser, keeps parent data
-        onDone();
-      },2000);
+      // Move to PIN reset step — sign out happens after PIN is optionally set
+      setStep('pin');
     }catch(e){
       setError(e.message||'Could not update password. Try again.');
     }
     setLoading(false);
+  };
+
+  const handleSkipPin=async()=>{
+    await supabase.auth.signOut();
+    dispatch({type:'RESET_AUTH_STATE'});
+    onDone();
   };
 
   return(
@@ -6890,20 +7069,29 @@ function SetNewPasswordScreen({onDone}){
 
         {/* Header */}
         <View style={{alignItems:'center',gap:8}}>
-          <Text style={{fontSize:48}}>{success?'✅':'🔑'}</Text>
+          <Text style={{fontSize:48}}>
+            {step==='done'?'🎉':step==='pin'||step==='pinConfirm'?'🔒':'🔑'}
+          </Text>
           <Text style={{color:C.green400,fontWeight:'800',fontSize:22,textAlign:'center'}}>
-            {success?'Password updated!':'Set new password'}
+            {step==='done'?'All done!'
+              :step==='pin'?'Reset your PIN too?'
+              :step==='pinConfirm'?'Confirm new PIN'
+              :'Set new password'}
           </Text>
           <Text style={{color:C.textMuted,fontSize:13,textAlign:'center'}}>
-            {success
+            {step==='done'
               ?'Sign in with your new password to continue.'
+              :step==='pin'
+              ?'Since you\'re here, set a new PIN too — or skip.'
+              :step==='pinConfirm'
+              ?'Enter the same PIN again to confirm.'
               :'Choose a new password for your Money Cells account'}
           </Text>
         </View>
 
-        {!success&&(
+        {/* ── Step: set password ── */}
+        {step==='password'&&(
           <>
-            {/* New password */}
             <View style={{gap:6}}>
               <Text style={{color:C.textMuted,fontSize:12,marginLeft:4}}>New password</Text>
               <TextInput
@@ -6915,8 +7103,6 @@ function SetNewPasswordScreen({onDone}){
                   borderColor:C.border,padding:14,color:C.text,fontSize:15}}
               />
             </View>
-
-            {/* Confirm password */}
             <View style={{gap:6}}>
               <Text style={{color:C.textMuted,fontSize:12,marginLeft:4}}>Confirm password</Text>
               <TextInput
@@ -6932,22 +7118,64 @@ function SetNewPasswordScreen({onDone}){
                 <Text style={{color:C.red,fontSize:11,marginLeft:4}}>Passwords do not match</Text>
               )}
             </View>
-
-            {/* Error */}
-            {!!error&&(
-              <Text style={{color:C.red,fontSize:13,textAlign:'center'}}>{error}</Text>
-            )}
-
-            {/* Submit */}
+            {!!error&&<Text style={{color:C.red,fontSize:13,textAlign:'center'}}>{error}</Text>}
             <TouchableOpacity onPress={handleSet} disabled={loading}
               style={{backgroundColor:loading?C.surface:C.green500,
                 borderRadius:12,padding:16,alignItems:'center',opacity:loading?0.6:1}}>
               <Text style={{color:loading?C.textMuted:C.bg,fontWeight:'800',fontSize:16}}>
-                {loading?'Updating...':'Update password'}
+                {loading?'Updating...':'Update password →'}
               </Text>
             </TouchableOpacity>
           </>
         )}
+
+        {/* ── Step: set new PIN ── */}
+        {step==='pin'&&(
+          <>
+            <PinInput label="" value={newPin} onChange={v=>{
+              setPinError('');setNewPin(v);
+              if(v.length===4){setStep('pinConfirm');}
+            }}/>
+            {!!pinError&&<Text style={{color:C.red,fontSize:12,textAlign:'center'}}>{pinError}</Text>}
+            <TouchableOpacity onPress={handleSkipPin}
+              style={{alignItems:'center',paddingVertical:8}}>
+              <Text style={{color:C.textMuted,fontSize:13}}>Skip — keep my existing PIN</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* ── Step: confirm new PIN ── */}
+        {step==='pinConfirm'&&(
+          <>
+            <PinInput label="" value={pinConfirm} onChange={async v=>{
+              setPinError('');setPinConfirm(v);
+              if(v.length===4){
+                if(v===newPin){
+                  dispatch({type:'SET_PIN',pin:newPin});
+                  setStep('done');
+                  await supabase.auth.signOut();
+                  setTimeout(()=>{dispatch({type:'RESET_AUTH_STATE'});onDone();},2000);
+                }else{
+                  setPinError("PINs don't match. Try again.");
+                  setTimeout(()=>setPinConfirm(''),300);
+                }
+              }
+            }}/>
+            {!!pinError&&<Text style={{color:C.red,fontSize:12,textAlign:'center'}}>{pinError}</Text>}
+            <TouchableOpacity onPress={()=>{setPinError('');setPinConfirm('');setStep('pin');setNewPin('');}}
+              style={{alignItems:'center',paddingVertical:8}}>
+              <Text style={{color:C.textMuted,fontSize:13}}>← Back</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* ── Step: done ── */}
+        {step==='done'&&(
+          <Text style={{color:C.textMuted,fontSize:13,textAlign:'center'}}>
+            Signing you out… sign in with your new password.
+          </Text>
+        )}
+
       </View>
     </SafeAreaView>
   );
@@ -6992,7 +7220,7 @@ function RootApp(){
           if(userId&&finalGame){
             const kid=state.parent?.kids?.find(k=>k.id===kidId);
             logSession(userId,{
-              kidName:kid?.name||'My Child',kidAge:kid?.age||8,
+              kidName:kid?.name||'Kid',kidAge:kid?.age||8,
               durationSecs:duration,
               totalRounds:finalGame.totalRounds,
               lifetimeCellsGained:finalGame.lifetimeCellsGained,
