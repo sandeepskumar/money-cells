@@ -46,12 +46,21 @@ const { width: SW } = Dimensions.get('window');
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:'#0a0f0a', surface:'#111811', card:'#162116',
-  border:'#1e3a28', green500:'#22c55e', green400:'#4ade80',
-  green300:'#86efac', green900:'#052e16', green700:'#15803d',
+  // Bright ocean-candy — light backgrounds, vivid accents
+  bg:'#f0f9ff',        // sky-50
+  surface:'#e0f2fe',   // sky-100
+  card:'#ffffff',      // white cards
+  border:'#bae6fd',    // sky-200
+  green500:'#0284c7',  // sky-600 — primary buttons
+  green400:'#0ea5e9',  // sky-500 — main accent
+  green300:'#38bdf8',  // sky-400
+  green900:'#dbeafe',  // blue-100 — light tint backgrounds
+  green700:'#0369a1',  // sky-700
   amber:'#f59e0b', red:'#ef4444', blue:'#3b82f6', purple:'#a855f7',
-  orange:'#f97316',
-  text:'#f0fdf4', textMuted:'#4d7c5f', textFaint:'#2d5a3d',
+  orange:'#f97316', cyan:'#06b6d4', pink:'#ec4899',
+  text:'#0f172a',      // slate-950
+  textMuted:'#64748b', // slate-500
+  textFaint:'#94a3b8', // slate-400
 };
 
 // ── Per-colony accent palette (hue values in HSL, cycles every 5) ──────────
@@ -1053,6 +1062,15 @@ function gameReducer(state,action){
       };
     }
 
+    case 'CHEER_BONUS':{
+      if(!state||state.phase!=='active')return state;
+      const live=state.cells.filter(c=>!c.burst);
+      if(live.length>=COLONY_CAP)return state;
+      const bonus=scatter(1,colonyAccent(state.colonyNumber||1)).map(c=>({...c,isNew:true,burst:false}));
+      return{...state,cells:[...state.cells,...bonus],
+        lifetimeCellsGained:(state.lifetimeCellsGained||0)+1};
+    }
+
     case 'BUY_FLASH_DEAL':{
       if(!state||!state.flashDeal)return state;
       const deal=state.flashDeal;
@@ -1245,7 +1263,7 @@ function ColonyGraduationScreen({game,onContinue}){
   const retiredCount=(game?.retiredColonies||[]).length;
 
   return(
-    <SafeAreaView style={{flex:1,backgroundColor:'#050a05'}}>
+    <SafeAreaView style={{flex:1,backgroundColor:C.bg}}>
       <ScrollView contentContainerStyle={{padding:24,gap:18,paddingBottom:40}}>
         {/* Trophy header */}
         <Animated.View style={{alignItems:'center',gap:8,transform:[{scale:scaleA}]}}>
@@ -1292,7 +1310,7 @@ function ColonyGraduationScreen({game,onContinue}){
 
         {/* Next colony bonus */}
         <Animated.View style={{opacity:fadeA,transform:[{translateY:slideA}]}}>
-          <View style={{backgroundColor:'#0d1a0d',borderRadius:14,borderWidth:1.5,borderColor:C.green500+'44',padding:16,gap:8}}>
+          <View style={{backgroundColor:C.green900,borderRadius:14,borderWidth:1.5,borderColor:C.green500+'44',padding:16,gap:8}}>
             <Text style={{color:C.green400,fontWeight:'800',fontSize:15}}>🌱 Colony #{colonyNum+1} Starting!</Text>
             <Text style={{color:C.green300,fontSize:13,lineHeight:20}}>
               Your old colony's children are ready to grow! Colony #{colonyNum+1} begins with <Text style={{color:C.green400,fontWeight:'800'}}>{BONUS_CARRY} bonus starter cells</Text> — like a snowball that keeps rolling, your hard work carries forward!
@@ -1665,7 +1683,19 @@ function SplitBurst({x, y, active}){
   );
 }
 
-function Cell({cell,onTap,interactive,totalLive,roundTimer}){
+function MoodBubble({emoji}){
+  const s=useRef(new Animated.Value(0)).current;
+  useEffect(()=>{
+    Animated.sequence([
+      Animated.spring(s,{toValue:1,friction:4,tension:90,useNativeDriver:true}),
+      Animated.delay(800),
+      Animated.timing(s,{toValue:0,duration:350,useNativeDriver:true}),
+    ]).start();
+  },[]);// eslint-disable-line react-hooks/exhaustive-deps
+  return(<Animated.Text style={{position:'absolute',top:-22,left:-2,fontSize:15,
+    opacity:s,transform:[{scale:s}],zIndex:99,pointerEvents:'none'}}>{emoji}</Animated.Text>);
+}
+function Cell({cell,onTap,interactive,totalLive,roundTimer,mood}){
   const breathAnim =useRef(new Animated.Value(1)).current;
   const floatX     =useRef(new Animated.Value(0)).current;
   const floatY     =useRef(new Animated.Value(0)).current;
@@ -1835,18 +1865,18 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
   const isWobbling  = splitPhase==='wobbling';
   const readyHue    = 48; // gold
   const effectiveHue= isReady?readyHue:isWobbling?Math.round(hue*0.6+readyHue*0.4):hue;
-  const glowColor   = isReady?C.amber:isWobbling?C.green400:`hsl(${hue},70%,58%)`;
+  const glowColor   = isReady?C.amber:isWobbling?C.green400:`hsl(${hue},78%,38%)`;
 
   const memStroke=cell.burst?C.red:isConfirmed?C.red:isPending?C.amber:
-    isReady?C.amber:cell.splitting?`hsl(${effectiveHue},85%,68%)`:`hsl(${hue},70%,58%)`;
+    isReady?C.amber:cell.splitting?`hsl(${effectiveHue},85%,42%)`:`hsl(${hue},78%,38%)`;
   const cytoFill  =cell.burst||isConfirmed?`${C.red}30`:isPending?`${C.amber}30`:
-    isReady?`${C.amber}28`:`hsla(${hue},60%,30%,0.38)`;
+    isReady?`${C.amber}28`:`hsla(${hue},72%,90%,0.85)`;
   const nucleusFill=cell.burst||isConfirmed?`${C.red}99`:isPending?`${C.amber}88`:
-    isReady?`${C.amber}cc`:`hsla(${hue},55%,22%,0.8)`;
+    isReady?`${C.amber}cc`:`hsla(${hue},68%,48%,0.88)`;
   const nucleoFill =cell.burst||isConfirmed?`${C.red}dd`:isPending?`${C.amber}cc`:
-    isReady?`#fff8cc`:`hsla(${hue},75%,70%,0.9)`;
+    isReady?`#fff8cc`:`hsla(${hue},60%,82%,0.95)`;
   const orgFill    =cell.burst||isConfirmed?`${C.red}66`:isPending?`${C.amber}55`:
-    isReady?`${C.amber}77`:`hsla(${hue},60%,50%,0.5)`;
+    isReady?`${C.amber}77`:`hsla(${hue},65%,65%,0.55)`;
 
   const R=CR;
   const nOX=cell.nucleusOX||0, nOY=cell.nucleusOY||0;
@@ -1854,6 +1884,7 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
 
   return(<>
     <Animated.View style={{position:'absolute',left:cell.x*DISH-R,top:cell.y*DISH-R,opacity:opacityAnim}}>
+      {mood&&!cell.burst&&<MoodBubble key={mood+'_'+cell.id} emoji={mood}/>}
       <Animated.View style={{transform:[{translateX:floatX},{translateY:floatY},{rotate:wobbleRot}]}}>
         <Animated.View style={{transform:[{scale:birthAnim}]}}>
           <Animated.View style={{transform:[{scale:tier===3?staticScale:breathAnim}]}}>
@@ -1872,8 +1903,8 @@ function Cell({cell,onTap,interactive,totalLive,roundTimer}){
                   alignItems:'center',justifyContent:'center',overflow:'visible',
                   shadowColor:isPending?C.amber:isConfirmed?C.red:isReady?C.amber:memStroke,
                   shadowOffset:{width:0,height:0},
-                  shadowOpacity:isPending?0.8:isReady?0.9:0.5,
-                  shadowRadius:isPending?8:isReady?14:5,
+                  shadowOpacity:isPending?0.65:isReady?0.75:0.25,
+                  shadowRadius:isPending?7:isReady?11:3,
                   elevation:isPending?5:isReady?8:3}}>
 
                 {/* Crescent highlight */}
@@ -1953,7 +1984,7 @@ function SplitReadyPulse({active}){
 }
 
 // Petri Dish with graduation ring color
-function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer}){
+function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer,cellMoods={}}){
   const[particles,setParticles]=useState([]);
   const prevRef=useRef(new Map());
   const totalLive=useMemo(()=>cells.filter(c=>!c.burst).length,[cells]);
@@ -1998,7 +2029,7 @@ function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer}){
         {phase==='splitting'&&<View style={{position:'absolute',inset:6,borderRadius:(DISH-12)/2,borderWidth:1,borderColor:C.green500+'33'}}/>}
         <SplitReadyPulse active={phase==='splitting'}/>
         {nearGrad&&<View style={{position:'absolute',inset:4,borderRadius:(DISH-8)/2,borderWidth:1.5,borderColor:C.amber+'33'}}/>}
-        {cells.map(c=><Cell key={c.id} cell={c} onTap={onTap} interactive={interactive} totalLive={totalLive} roundTimer={roundTimer}/>)}
+        {cells.map(c=><Cell key={c.id} cell={c} onTap={onTap} interactive={interactive} totalLive={totalLive} roundTimer={roundTimer} mood={cellMoods[c.id]}/>)}
         {particles.map(p=><Particle key={p.id} {...p} onDone={()=>removeParticle(p.id)}/>)}
       </View>
     </View>
@@ -2006,7 +2037,7 @@ function PetriDish({cells,onTap,interactive,phase,nearGrad,roundTimer}){
 }
 
 // ── Dish + Session Timer ───────────────────────────────────────────────────
-function DishArea({cells,onTap,interactive,phase,sessionRemaining,sessionTotal,nearGrad,roundTimer,roundPct,roundColor,rateStory,colonyColor}){
+function DishArea({cells,onTap,interactive,phase,sessionRemaining,sessionTotal,nearGrad,roundTimer,roundPct,roundColor,rateStory,colonyColor,cellMoods}){
   const idleColor=colonyColor||C.green400;
   const sc=sessionRemaining<=60?C.red:sessionRemaining<=120?C.amber:idleColor;
   const urgent=sessionRemaining<=120,critical=sessionRemaining<=30;
@@ -2022,7 +2053,7 @@ function DishArea({cells,onTap,interactive,phase,sessionRemaining,sessionTotal,n
         borderWidth:urgent?3:1.5,borderColor:sc+(urgent?'cc':'33'),
         shadowColor:sc,shadowOffset:{width:0,height:0},shadowOpacity:urgent?(critical?0.85:0.5):0,shadowRadius:12,elevation:urgent?8:0,
         transform:[{scale:ringPulse}]}}/>
-      <PetriDish cells={cells} onTap={onTap} interactive={interactive} phase={phase} nearGrad={nearGrad} roundTimer={roundTimer}/>
+      <PetriDish cells={cells} onTap={onTap} interactive={interactive} phase={phase} nearGrad={nearGrad} roundTimer={roundTimer} cellMoods={cellMoods}/>
       {/* Session timer — top-right corner, outside the ring */}
       <View pointerEvents="none" style={{position:'absolute',top:-8,right:-8,zIndex:20}}>
         <View style={{backgroundColor:sc+'44',borderRadius:10,paddingHorizontal:9,paddingVertical:5,borderWidth:1.5,borderColor:sc+'99',flexDirection:'row',alignItems:'center',gap:3}}>
@@ -2057,7 +2088,7 @@ function ColonyProgressBanner({count,colonyNum,onMuseum}){
   return(
     <Animated.View style={{marginHorizontal:16,marginBottom:6,transform:[{scale:bannerPulse}]}}>
       <TouchableOpacity onPress={onMuseum}
-        style={{backgroundColor:isWarn?'#1a0f00':'#0d1a0d',borderRadius:12,borderWidth:1.5,
+        style={{backgroundColor:isWarn?'#fff7ed':C.surface,borderRadius:12,borderWidth:1.5,
           borderColor:barColor+'66',padding:10}}>
         <View style={{flexDirection:'row',alignItems:'center',gap:8,marginBottom:6}}>
           <Text style={{fontSize:14}}>🎓</Text>
@@ -3463,7 +3494,7 @@ function ParentDashboardScreen({onBack}){
           {conversationStarterView}}
 
           {/* ── Coming soon: Cellie Pro ───────────────────────────── */}
-          <View style={{backgroundColor:'#1a0f2e',borderRadius:14,
+          <View style={{backgroundColor:C.card,borderRadius:14,
             borderWidth:2,borderColor:C.purple+'44',padding:16,gap:10}}>
             <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
               <Text style={{fontSize:28}}>🚀</Text>
@@ -3851,7 +3882,7 @@ function OnboardDishAnim({tick,color}){
     hue:130+i*8,
   })),[]);// eslint-disable-line react-hooks/exhaustive-deps
   return(
-    <View style={{width:150,height:150,borderRadius:75,backgroundColor:'#0d1a0d',borderWidth:2.5,borderColor:color+'88',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+    <View style={{width:150,height:150,borderRadius:75,backgroundColor:C.surface,borderWidth:2.5,borderColor:color+'88',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
       <View style={{position:'absolute',inset:6,borderRadius:69,borderWidth:1,borderColor:color+'22'}}/>
       {cells.map((c,i)=>{
         const scale=1+Math.sin(tick*0.12+c.phase)*0.1;
@@ -4902,6 +4933,9 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
   const[showDealConfirm,setShowDealConfirm]=useState(false);
   const[splitCelebration,setSplitCelebration]=useState(null); // {gained, bonusCells, nextPhase}
   const[starToast,setStarToast]=useState(null);  // {stars:N, message:str}
+  const[cheerEnergy,setCheerEnergy]=useState(0); // 0-100, fills as kid taps
+  const[cheerDone,setCheerDone]=useState(false);  // true once bonus earned this round
+  const[cellMoods,setCellMoods]=useState({});     // {cellId: emoji}
   const prevStarsRef=useRef(0);
   const starBounce =useRef(new Animated.Value(1)).current;
   const starToastOp=useRef(new Animated.Value(0)).current;
@@ -4960,6 +4994,25 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
     return()=>clearInterval(interval);
   },[]);// eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reset cheer bar each new active round
+  useEffect(()=>{if(phase==='active'){setCheerEnergy(0);setCheerDone(false);}},[phase]);// eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cell mood bubbles — every 1.8s pick a random live cell and give it a personality
+  const MOOD_POOL=['🌱','⚡','✨','💪','🔥','💫','😄','🎵','🌟','🤩'];
+  useEffect(()=>{
+    if(phase!=='active')return;
+    const interval=setInterval(()=>{
+      if(!game?.cells)return;
+      const live=game.cells.filter(c=>!c.burst);
+      if(live.length===0)return;
+      const pick=live[Math.floor(Math.random()*live.length)];
+      const emoji=MOOD_POOL[Math.floor(Math.random()*MOOD_POOL.length)];
+      setCellMoods(m=>({...m,[pick.id]:emoji}));
+      setTimeout(()=>setCellMoods(m=>{const n={...m};delete n[pick.id];return n;}),1700);
+    },1800);
+    return()=>clearInterval(interval);
+  },[phase]);// eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(()=>{if(phase==='splitting'){dispatch({type:'MARK_SPLITTING'});setTimeout(()=>dispatch({type:'RESOLVE'}),650);}},[phase,dispatch]);
   useEffect(()=>{
     if(phase==='results'||phase==='levelup'||phase==='graduating'||phase==='extinct'){
@@ -4982,6 +5035,20 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
     }
   },[phase]);// eslint-disable-line react-hooks/exhaustive-deps
 
+
+  const handleCheer=useCallback(()=>{
+    if(cheerDone||phase!=='active'||confirmedCount>0||pendingCount>0)return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCheerEnergy(e=>{
+      const next=Math.min(100,e+7);
+      if(next>=100&&!cheerDone){
+        setCheerDone(true);
+        dispatch({type:'CHEER_BONUS'});
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      return next;
+    });
+  },[cheerDone,phase,confirmedCount,pendingCount,dispatch]);// eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBuyDeal=()=>{
     // Show "are you sure?" before purchasing — teaches impulse control
@@ -5039,9 +5106,9 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
   const cHue=colonyAccent(game.colonyNumber||1);
   const cHex=colonyHex(game.colonyNumber||1);
   const instrText=confirmedCount>0?`😬 ${confirmedCount} confirmed · Tap again to undo!`:pendingCount>0?`⚡ Tap again to confirm · wait 3s to change your mind!`:'✨ Tap a cell to think about spending · leave them to multiply! 🧬';
-  const instrColor=confirmedCount>0?C.red:pendingCount>0?C.amber:`hsl(${cHue},75%,72%)`;
-  const instrBg   =confirmedCount>0?C.red+'11':pendingCount>0?C.amber+'11':`hsla(${cHue},60%,15%,0.5)`;
-  const instrBorder=confirmedCount>0?C.red+'44':pendingCount>0?C.amber+'33':`hsla(${cHue},50%,35%,0.4)`;
+  const instrColor=confirmedCount>0?C.red:pendingCount>0?C.amber:`hsl(${cHue},75%,30%)`;
+  const instrBg   =confirmedCount>0?C.red+'11':pendingCount>0?C.amber+'11':`hsla(${cHue},65%,94%,0.9)`;
+  const instrBorder=confirmedCount>0?C.red+'44':pendingCount>0?C.amber+'33':`hsla(${cHue},55%,65%,0.5)`;
 
   // ── Context slot priority ─────────────────────────────────────────────
   // Only ONE of these renders at a time — highest priority wins
@@ -5307,6 +5374,7 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
             roundColor={tc}
             rateStory={rs}
             colonyColor={cHex}
+            cellMoods={cellMoods}
           />
 
         </View>
@@ -5454,12 +5522,33 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
             </Text>
           </View>
         )}
-        {showInstruction&&(
+        {showInstruction&&confirmedCount===0&&pendingCount===0&&phase==='active'&&(
+          <View style={{backgroundColor:instrBg,borderRadius:10,borderWidth:1,
+            borderColor:instrBorder,padding:10,gap:8}}>
+            <Text style={{color:instrColor,fontSize:12,textAlign:'center'}}>{instrText}</Text>
+            {/* Cheer bar — tap rapidly to power up cells and earn +1 bonus cell */}
+            <TouchableOpacity onPress={handleCheer} activeOpacity={0.85}
+              style={{height:38,backgroundColor:C.surface,borderRadius:8,overflow:'hidden',
+                borderWidth:1.5,borderColor:cheerDone?C.green400:`hsl(${cHue},60%,70%)`}}>
+              <View style={{position:'absolute',left:0,top:0,bottom:0,
+                width:`${cheerEnergy}%`,
+                backgroundColor:cheerDone?C.green400:`hsl(${cHue},72%,55%)`,
+                borderRadius:8}}/>
+              <View style={{position:'absolute',inset:0,flexDirection:'row',
+                alignItems:'center',justifyContent:'center',gap:6}}>
+                <Text style={{fontSize:16}}>{cheerDone?'🎉':'⚡'}</Text>
+                <Text style={{color:cheerDone?C.green400:instrColor,fontWeight:'800',fontSize:12}}>
+                  {cheerDone?'+1 BONUS CELL!':'TAP TO POWER UP YOUR CELLS!'}
+                </Text>
+                {!cheerDone&&<Text style={{color:C.textFaint,fontSize:11}}>{cheerEnergy}%</Text>}
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+        {showInstruction&&(confirmedCount>0||pendingCount>0||phase!=='active')&&(
           <View style={{backgroundColor:instrBg,borderRadius:8,borderWidth:1,
             borderColor:instrBorder,padding:10}}>
-            <Text style={{color:instrColor,fontSize:13,textAlign:'center'}}>
-              {instrText}
-            </Text>
+            <Text style={{color:instrColor,fontSize:13,textAlign:'center'}}>{instrText}</Text>
           </View>
         )}
       </View>
@@ -5723,7 +5812,7 @@ function CellieQuizCard({question,onAnswer,onSkip}){
 
           {/* Because explanation — shown after answering */}
           {revealed&&(
-            <View style={{backgroundColor:correct?C.green900:'#1a0505',
+            <View style={{backgroundColor:correct?C.green900:C.red+'18',
               borderRadius:10,padding:12,marginTop:4,
               borderWidth:1,borderColor:correct?C.green700:C.red+'44'}}>
               <Text style={{color:correct?C.green300:C.red+'cc',
@@ -5883,7 +5972,7 @@ function KidResultsScreen({onNext,onShop}){
         ):null)}
 
         {gained>0?(
-          <View style={{backgroundColor:'#0d1a0d',borderRadius:12,borderWidth:1,borderColor:C.green700,padding:12,gap:6}}>
+          <View style={{backgroundColor:C.green900,borderRadius:12,borderWidth:1,borderColor:C.green700,padding:12,gap:6}}>
             <Text style={{color:C.green400,fontWeight:'700',fontSize:12,marginBottom:4}}>🔢 What just happened?</Text>
             {[
               ['🧬',`Started with ${latest?.before} cells`],
@@ -5899,7 +5988,7 @@ function KidResultsScreen({onNext,onShop}){
             ))}
           </View>
         ):(latest?.kept>0)?(
-          <View style={{backgroundColor:'#0d1505',borderRadius:12,borderWidth:1,borderColor:C.green900,padding:12,gap:6}}>
+          <View style={{backgroundColor:C.surface,borderRadius:12,borderWidth:1,borderColor:C.border,padding:12,gap:6}}>
             <Text style={{color:C.textMuted,fontWeight:'700',fontSize:12,marginBottom:4}}>🔢 What just happened?</Text>
             {[
               ['🧬',`Started with ${latest?.before} cells`],
@@ -5951,7 +6040,7 @@ function ColonyExtinctScreen({game,onContinue}){
   },[]);// eslint-disable-line react-hooks/exhaustive-deps
 
   return(
-    <SafeAreaView style={{flex:1,backgroundColor:'#0d0505'}}>
+    <SafeAreaView style={{flex:1,backgroundColor:C.bg}}>
       <ScrollView contentContainerStyle={{padding:24,gap:20,alignItems:'center',paddingBottom:40}}>
 
         {/* Extinct animation */}
@@ -5968,9 +6057,9 @@ function ColonyExtinctScreen({game,onContinue}){
         </Animated.View>
 
         {/* What happened */}
-        <View style={{backgroundColor:'#1a0505',borderRadius:16,
-          borderWidth:1.5,borderColor:'#ef4444'+'44',padding:20,gap:14,width:'100%'}}>
-          <Text style={{color:'#fca5a5',fontWeight:'800',fontSize:15}}>
+        <View style={{backgroundColor:C.red+'11',borderRadius:16,
+          borderWidth:1.5,borderColor:C.red+'44',padding:20,gap:14,width:'100%'}}>
+          <Text style={{color:C.red,fontWeight:'800',fontSize:15}}>
             📉 What happened?
           </Text>
           <View style={{gap:10}}>
@@ -5982,14 +6071,14 @@ function ColonyExtinctScreen({game,onContinue}){
             ].map(([icon,text])=>(
               <View key={text} style={{flexDirection:'row',gap:12,alignItems:'flex-start'}}>
                 <Text style={{fontSize:18}}>{icon}</Text>
-                <Text style={{color:'#fca5a5',fontSize:13,flex:1,lineHeight:20}}>{text}</Text>
+                <Text style={{color:C.red,fontSize:13,flex:1,lineHeight:20}}>{text}</Text>
               </View>
             ))}
           </View>
         </View>
 
         {/* The lesson */}
-        <View style={{backgroundColor:'#0d1a0d',borderRadius:16,
+        <View style={{backgroundColor:C.green900,borderRadius:16,
           borderWidth:1.5,borderColor:C.green700,padding:20,gap:10,width:'100%'}}>
           <Text style={{color:C.green400,fontWeight:'800',fontSize:15}}>
             🌱 The lesson
@@ -6574,7 +6663,7 @@ function UnifiedShopScreen({onBack,kidName}){
         ):(
           <TouchableOpacity onPress={()=>setShowVisionCamera(true)}
             disabled={visionLoading}
-            style={{backgroundColor:'#0a1929',borderRadius:12,borderWidth:2,
+            style={{backgroundColor:C.green900,borderRadius:12,borderWidth:2,
               borderColor:C.blue+'66',padding:16,alignItems:'center',gap:6,marginTop:4}}>
             {visionLoading?(
               <ActivityIndicator color={C.blue} size="large"/>
@@ -7242,7 +7331,7 @@ class ErrorBoundary extends React.Component {
   render(){
     if(this.state.error){
       return(
-        <SafeAreaView style={{flex:1,backgroundColor:'#0a0f0a',padding:24,justifyContent:'center'}}>
+        <SafeAreaView style={{flex:1,backgroundColor:C.bg,padding:24,justifyContent:'center'}}>
           <Text style={{color:'#ef4444',fontWeight:'800',fontSize:18,marginBottom:16}}>💥 App Crashed</Text>
           <Text style={{color:'#fca5a5',fontSize:13,fontFamily:'monospace',lineHeight:20,marginBottom:16}}>
             {this.state.error?.message}
