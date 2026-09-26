@@ -2,14 +2,14 @@
   "expo": {
     "name": "Money Cells",
     "slug": "money-cells",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#080e09"
+      "backgroundColor": "#f0f9ff"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -37,7 +37,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#080e09"
+        "backgroundColor": "#f0f9ff"
       },
       "package": "com.moneycells.app",
       "versionCode": 2,
