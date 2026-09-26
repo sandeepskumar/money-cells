@@ -2,7 +2,7 @@
   "expo": {
     "name": "Money Cells",
     "slug": "money-cells",
-    "version": "1.1.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.moneycells.app",
-      "buildNumber": "19",
+      "buildNumber": "41",
       "deploymentTarget": "16.0",
       "infoPlist": {
         "NSCameraUsageDescription": "Cellie uses your camera to analyse items you want to buy and give you a 'worth it?' verdict.",

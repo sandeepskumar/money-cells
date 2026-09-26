@@ -109,13 +109,35 @@ REDIRECT for unrelated but innocent questions:
 // ════════════════════════════════════════════════════════════════════════════
 function visionSystemPrompt(
   kidName: string, kidAge: number, gameContext: string,
-  wishItemName?: string, wishItemCost?: number
+  wishItemName?: string, wishItemCost?: number,
+  goalSetup?: boolean
 ): string {
   const ageStyle = kidAge <= 8
     ? "Very simple words, lots of emoji, max 8 words per sentence."
     : kidAge <= 10
     ? "Simple clear language, fun and punchy, some emoji."
     : "Clear engaging language, still short and fun.";
+
+  if (goalSetup) {
+    return `You are Cellie 🧬 — a money-savvy science buddy inside Money Cells, a kids financial literacy app. A child has just photographed something they want to save up for. Look at the photo carefully and give your honest, specific assessment.
+
+THE KID: Name: ${kidName}. ${ageStyle}
+
+REQUIRED FIRST LINE (the app reads this to create the goal — do not skip):
+**[item name]** [emoji] · [price as a plain number, no currency symbol]
+
+Use the local retail price of the item in whatever currency makes sense for where it's likely sold. Just write the number — no $, ₹, £, or other symbol. Examples: "· 25" or "· 1299" or "· 8".
+
+Then write 3-5 sentences. Do NOT follow a template — react to what you actually see:
+- Name the specific item (brand, model, type) if you can recognise it
+- Give a genuine value take: Is it good value for the price? Is it the kind of thing that lasts or disappears fast? Would you recommend it?
+- Do the cell maths: say how many cells needed (= the number above) and roughly how many game sessions that is at ~5 new cells per session
+- Be honest — if it seems overpriced, say so. If it's great value, be enthusiastic. A worn-out toy gets a different answer than a brand-new LEGO set.
+
+End with: "Want to make this your savings goal? 🎯"
+
+If the photo is blurry or you genuinely can't identify anything: **Mystery Item** 🎁 · 20, then suggest they retake the photo up close in good light.`;
+  }
 
   return `You are Cellie 🧬 — a friendly money advisor inside Money Cells, a kids financial literacy app. A child has sent you a photo of something they want to buy. Be their smart spending buddy — honest, warm, and educational.
 
@@ -241,6 +263,7 @@ Deno.serve(async (req: Request) => {
       wishItemName,
       wishItemCost,
       sessionSummary,
+      goalSetup     = false,
 
     } = body;
 
@@ -283,8 +306,8 @@ Deno.serve(async (req: Request) => {
       userContent = [{ type: "text", text: question || "Please provide this week's coaching insight." }];
     } else if (mode === "vision") {
       model = "claude-sonnet-4-6";
-      maxTokens = 400;
-      systemPrompt = visionSystemPrompt(kidName, kidAge, gameContext, wishItemName, wishItemCost);
+      maxTokens = goalSetup ? 600 : 400;   // goalSetup needs more room for analysis + structured header
+      systemPrompt = visionSystemPrompt(kidName, kidAge, gameContext, wishItemName, wishItemCost, goalSetup);
       userContent = [
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
         { type: "text", text: question || "Is this worth buying with my cells?" },
