@@ -61,6 +61,11 @@ const C = {
   text:'#0f172a',      // slate-950
   textMuted:'#64748b', // slate-500
   textFaint:'#94a3b8', // slate-400
+  // Legacy aliases used in existing code
+  greenL:'#0ea5e9',    // same as green400
+  greenD:'#e0f2fe',    // same as surface
+  muted:'#64748b',     // same as textMuted
+  white:'#0f172a',     // readable dark text on light bg
 };
 
 // ── Per-colony accent palette (hue values in HSL, cycles every 5) ──────────
@@ -1495,10 +1500,10 @@ function ColonyMuseumScreen({game,onBack}){
         </View>
 
         {/* Dynasty stats */}
-        {dynastyStatsView}}
+        {dynastyStatsView}
 
         {/* Generation groups */}
-        {generationGroupsView}}
+        {generationGroupsView}
 
         {/* Current active colony */}
         <View>
@@ -1692,8 +1697,12 @@ function MoodBubble({emoji}){
       Animated.timing(s,{toValue:0,duration:350,useNativeDriver:true}),
     ]).start();
   },[]);// eslint-disable-line react-hooks/exhaustive-deps
-  return(<Animated.Text style={{position:'absolute',top:-22,left:-2,fontSize:15,
-    opacity:s,transform:[{scale:s}],zIndex:99,pointerEvents:'none'}}>{emoji}</Animated.Text>);
+  return(
+    <Animated.View pointerEvents="none" style={{position:'absolute',top:-22,left:-2,
+      opacity:s,transform:[{scale:s}],zIndex:99}}>
+      <Text style={{fontSize:15}}>{emoji}</Text>
+    </Animated.View>
+  );
 }
 function Cell({cell,onTap,interactive,totalLive,roundTimer,mood}){
   const breathAnim =useRef(new Animated.Value(1)).current;
@@ -3485,13 +3494,13 @@ function ParentDashboardScreen({onBack}){
           {!g&&<View style={{alignItems:'center',padding:32}}><Text style={{fontSize:48}}>🌱</Text><Text style={{color:C.textMuted,textAlign:'center',fontSize:13,marginTop:8}}>No games yet!</Text></View>}
 
           {/* Quiz performance */}
-          {quizPerformanceView}}
+          {quizPerformanceView}
 
           {/* Saving trend */}
-          {savingTrendView}}
+          {savingTrendView}
 
           {/* Conversation starter */}
-          {conversationStarterView}}
+          {conversationStarterView}
 
           {/* ── Coming soon: Cellie Pro ───────────────────────────── */}
           <View style={{backgroundColor:C.card,borderRadius:14,
@@ -5036,8 +5045,12 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
   },[phase]);// eslint-disable-line react-hooks/exhaustive-deps
 
 
+  // Compute early so handleCheer can reference them without TDZ issues
+  const pendingCountEarly  =(game?.cells||[]).filter(c=>c.spendState==='pending').length;
+  const confirmedCountEarly=(game?.cells||[]).filter(c=>c.spendState==='confirmed').length;
+
   const handleCheer=useCallback(()=>{
-    if(cheerDone||phase!=='active'||confirmedCount>0||pendingCount>0)return;
+    if(cheerDone||phase!=='active'||confirmedCountEarly>0||pendingCountEarly>0)return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCheerEnergy(e=>{
       const next=Math.min(100,e+7);
@@ -5048,7 +5061,7 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
       }
       return next;
     });
-  },[cheerDone,phase,confirmedCount,pendingCount,dispatch]);// eslint-disable-line react-hooks/exhaustive-deps
+  },[cheerDone,phase,confirmedCountEarly,pendingCountEarly,dispatch]);// eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBuyDeal=()=>{
     // Show "are you sure?" before purchasing — teaches impulse control
@@ -5534,7 +5547,7 @@ function KidGameScreen({sessionRemaining,sessionTotal,cellieOpen,setCellieOpen,c
                 width:`${cheerEnergy}%`,
                 backgroundColor:cheerDone?C.green400:`hsl(${cHue},72%,55%)`,
                 borderRadius:8}}/>
-              <View style={{position:'absolute',inset:0,flexDirection:'row',
+              <View style={{position:'absolute',top:0,right:0,bottom:0,left:0,flexDirection:'row',
                 alignItems:'center',justifyContent:'center',gap:6}}>
                 <Text style={{fontSize:16}}>{cheerDone?'🎉':'⚡'}</Text>
                 <Text style={{color:cheerDone?C.green400:instrColor,fontWeight:'800',fontSize:12}}>
