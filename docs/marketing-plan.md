@@ -102,7 +102,7 @@ Track installs by source with App Store campaign links and creator referral code
 
 ## 8. First 30 days — to-do
 
-1. Ship new icon + splash (`assets/brand/`) in the next EAS build.
+1. Ship new icon + blue splash (already in `assets/images/`) in the next EAS build.
 2. Redo App Store screenshots and subtitle; apply to Kids Category.
 3. Open TikTok/Instagram as **@moneycells** with Cellie avatar; post 12 videos.
 4. Build the classroom kit (lesson plan + printable tracker).

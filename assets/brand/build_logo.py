@@ -17,6 +17,7 @@ SKY_TOP, SKY_BOT = '#7dd3fc', '#0ea5e9'
 GREEN_HI, GREEN, GREEN_DK = '#bbf7d0', '#4ade80', '#16a34a'
 GOLD_HI, GOLD, GOLD_DK = '#fef08a', '#facc15', '#d97706'
 INK = '#0f172a'
+SPLASH_BG = '#38bdf8'
 BLUSH = '#fda4af'
 
 
@@ -125,6 +126,15 @@ def main():
             + wordmark(font, 621 - w1 / 2, 1000, 150)
             + f'<path d="{tag2}" transform="translate({621 - tw/2} 1110)" fill="#f97316"/>')
     write('money-cells-splash.svg', 1242, 1242, body)
+    # 5. Blue app splash (flat SPLASH_BG so it blends with app.json backgroundColor)
+    body = (f'<rect width="1242" height="1242" fill="{SPLASH_BG}"/>'
+            + ''.join(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="#ffffff" opacity="0.25"/>'
+                      for cx, cy, r in [(170, 200, 50), (1080, 760, 40), (140, 900, 28), (1050, 120, 22)])
+            + f'<g transform="translate(241 110) scale(0.74)">{mark(font, bg=False)}</g>'
+            + wordmark(font, 621 - w1 / 2, 1000, 150, money='#0369a1')
+            + f'<path d="{tag2}" transform="translate({621 - tw/2} 1110)" fill="#ffffff" '
+              f'stroke="#c2410c" stroke-width="12" paint-order="stroke" stroke-linejoin="round"/>')
+    write('money-cells-splash-blue.svg', 1242, 1242, body)
 
 
 if __name__ == '__main__':

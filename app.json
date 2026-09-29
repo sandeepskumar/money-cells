@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f0f9ff"
+      "backgroundColor": "#38bdf8"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -37,7 +37,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#f0f9ff"
+        "backgroundColor": "#38bdf8"
       },
       "package": "com.moneycells.app",
       "versionCode": 2,
