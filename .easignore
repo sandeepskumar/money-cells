@@ -46,3 +46,16 @@ llm-learn/
 venv/
 .venv/
 __pycache__/
+
+# ── EAS-only: files not needed to build the app ──
+# (.easignore replaces .gitignore for EAS uploads, so the rules above are repeated here)
+Screenshots/
+results/
+docs/
+supabase/
+assets/brand/
+*.py
+*.csv
+*.sh
+*.jsonl
+money-cells-admin.html
