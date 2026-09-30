@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Money Cells">
+  <circle cx="32" cy="32" r="29" fill="#e0f2fe" stroke="#0284c7" stroke-width="3"/>
+  <circle cx="32" cy="32" r="24" fill="none" stroke="#bae6fd" stroke-width="1.5"/>
+  <circle cx="24" cy="26" r="10" fill="#38bdf8" stroke="#0369a1" stroke-width="2"/>
+  <text x="24" y="31" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">$</text>
+  <circle cx="41" cy="23" r="6" fill="#4ade80" stroke="#15803d" stroke-width="1.5"/>
+  <circle cx="40" cy="41" r="7" fill="#fbbf24" stroke="#b45309" stroke-width="1.5"/>
+  <circle cx="24" cy="44" r="4.5" fill="#c084fc" stroke="#7e22ce" stroke-width="1.5"/>
+</svg>

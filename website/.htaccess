@@ -1,0 +1,29 @@
+# Money Cells — Apache config for Namecheap shared hosting
+Options -Indexes
+DirectoryIndex index.html
+ErrorDocument 404 /404.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Force HTTPS (enable free SSL in cPanel first)
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  # Force www
+  RewriteCond %{HTTP_HOST} ^moneycellsapp\.com$ [NC]
+  RewriteRule ^ https://www.moneycellsapp.com%{REQUEST_URI} [L,R=301]
+  # Old/lowercase privacy URLs → canonical path used by the App Store listing
+  RewriteCond %{REQUEST_URI} !^/Privacy-Policy/$
+  RewriteRule ^(privacy|privacy-policy|privacy\.html)/?$ /Privacy-Policy/ [NC,L,R=301]
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
