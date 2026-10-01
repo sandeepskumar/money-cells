@@ -52,6 +52,12 @@ Deno.serve(async (req: Request) => {
         { status: 403, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
+    // Cellie's question log is written with the service role, so the app
+    // can't delete it under RLS — remove it here before the auth user goes
+    const { error: logError } = await supabase
+      .from("tutor_sessions").delete().eq("user_id", userId);
+    if (logError) console.error("tutor_sessions delete error:", logError);
+
     // Delete the auth user — cascade handles all related data
     const { error } = await supabase.auth.admin.deleteUser(userId);
 

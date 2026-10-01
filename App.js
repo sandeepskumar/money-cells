@@ -752,6 +752,17 @@ function appReducer(state,action){
     default:           return state;
   }
 }
+// Headers for Cellie calls — send the parent's session token when signed in
+// so the Edge Function can tag logged questions with user_id (for deletion)
+async function cellieHeaders(){
+  let token=SUPABASE_ANON;
+  try{
+    const{data}=await supabase.auth.getSession();
+    if(data?.session?.access_token)token=data.session.access_token;
+  }catch(e){}
+  return{'Content-Type':'application/json','Authorization':`Bearer ${token}`};
+}
+
 // ── Supabase Auth helpers ─────────────────────────────────────────────────
 
 // Sign up new parent with email + password
@@ -3276,7 +3287,7 @@ function CoachingCard({userId, kids}){
 
       const resp=await fetch('https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+        headers:await cellieHeaders(),
         body:JSON.stringify({
           mode:'parent',
           question,
@@ -4169,7 +4180,7 @@ async function analysePurchase(base64Image,kidName,kidAge,sessionCells,wishItem)
   try{
     const res=await fetch(url,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+      headers:await cellieHeaders(),
       body:JSON.stringify({
         mode:'vision',
         image:base64Image,
@@ -4227,7 +4238,7 @@ function CellieModal({visible,onClose,kidName,kidAge,sessionCells,round,streak,r
       try{
         const res=await fetch(CELLIE_URL||CELLIE_ENDPOINT,{
           method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+          headers:await cellieHeaders(),
           body:JSON.stringify({question,kidName,kidAge,
             sessionCells,round:round||1,streak:streak||0,
             resistMeter:resistMeter||0}),
@@ -4711,7 +4722,7 @@ function KidSetupScreen({kidName,onDone}){
                       const url=CELLIE_VISION_URL||'https://wztykysqvnngsnmadrdt.supabase.co/functions/v1/cellie';
                       const resp=await fetch(url,{
                         method:'POST',
-                        headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+                        headers:await cellieHeaders(),
                         body:JSON.stringify({
                           mode:'vision',image:base64,
                           question:'What is this item and is it worth saving for?',
@@ -6721,7 +6732,7 @@ function UnifiedShopScreen({onBack,kidName}){
                 const url=CELLIE_VISION_URL||CELLIE_ENDPOINT;
                 const resp=await fetch(url,{
                   method:'POST',
-                  headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+                  headers:await cellieHeaders(),
                   body:JSON.stringify({
                     mode:'vision',image:base64,
                     question:'What is this item and is it worth saving for?',

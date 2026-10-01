@@ -28,6 +28,16 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// ── Caller identity ────────────────────────────────────────────────────────
+// Signed-in parents send their session JWT; the anon key resolves to null.
+// user_id lets account deletion remove a family's logged questions.
+async function userIdFromRequest(req: Request): Promise<string | null> {
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!token) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  return error ? null : data.user?.id ?? null;
+}
+
 // ── Embedding ──────────────────────────────────────────────────────────────
 async function embed(text: string): Promise<number[]> {
   // 5 second timeout — if OpenAI is slow, skip RAG and use general knowledge
@@ -337,11 +347,14 @@ Deno.serve(async (req: Request) => {
     const claudeData = await claudeRes.json();
     const answer = claudeData.content?.[0]?.text ?? "Hmm, my brain had a hiccup! Ask me again 🧬";
 
-    supabase.from("tutor_sessions").insert({
-      kid_id: kidId ?? "anonymous",
-      question: queryText || "[parent coaching]",
-      answer, doc_ids: docIds, kid_age: kidAge, session_cells: sessionCells, mode,
-    }).then(() => {}).catch(() => {});
+    userIdFromRequest(req).then((userId) =>
+      supabase.from("tutor_sessions").insert({
+        user_id: userId,
+        kid_id: kidId ?? "anonymous",
+        question: queryText || "[parent coaching]",
+        answer, doc_ids: docIds, kid_age: kidAge, session_cells: sessionCells, mode,
+      })
+    ).then(() => {}).catch(() => {});
 
     return new Response(
       JSON.stringify({ answer, docIds, mode }),
