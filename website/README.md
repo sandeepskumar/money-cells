@@ -13,7 +13,6 @@ assets/logo.svg         Logo (also favicon.svg)
 ```
 
 ## Before you upload
-- Replace `https://apps.apple.com/app/money-cells` in `index.html` (2 places) with the real App Store URL.
 - Confirm `support@moneycellsapp.com` exists, or search-and-replace it.
 - Have the Privacy Policy reviewed. It was written from the app code, not copied from the old site.
 
