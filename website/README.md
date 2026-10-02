@@ -8,7 +8,7 @@ Privacy-Policy/         /Privacy-Policy/ (same URL as the old site, which the Ap
 support/                /support/
 404.html                Custom 404
 assets/style.css        Shared styles and color tokens (:root)
-assets/logo.svg         Logo (also favicon.svg)
+assets/logo.png, favicon-*.png, apple-touch-icon.png   App icon (from App Store v1.5.0)
 .htaccess               HTTPS + www redirects, 404 page, caching
 ```
 
